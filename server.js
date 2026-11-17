@@ -10,6 +10,8 @@ const scheduler = require("./src/scheduler");
 const employees = require("./src/employees");
 const events = require("./src/events");
 const { ingestWebsite } = require("./src/ingest");
+const budget = require("./src/budget");
+const ghl = require("./src/ghl");
 const { resolveWhen, formatWhen } = require("./src/tools");
 
 const app = express();
@@ -385,6 +387,7 @@ app.delete("/api/team/:id", (req, res) => {
 app.get("/api/integrations", (_req, res) => {
   res.json([
     { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Add ANTHROPIC_API_KEY to .env and restart." },
+    { id: "gohighlevel", name: "GoHighLevel", desc: "Publishes to Instagram, Facebook, TikTok, LinkedIn & YouTube.", connected: ghl.isConfigured(), how: "Connect your socials in GHL Social Planner, then add GHL_TOKEN (scope socialplanner/post.write) and GHL_LOCATION_ID to .env." },
     { id: "instagram", name: "Instagram", desc: "Live publishing & DMs.", connected: false, how: "Requires a Meta developer app + Instagram Graph API approval." },
     { id: "facebook", name: "Facebook", desc: "Page posts & Messenger.", connected: false, how: "Requires a Meta developer app + Pages API access." },
     { id: "tiktok", name: "TikTok", desc: "Video publishing.", connected: false, how: "Requires TikTok Content Posting API approval." },
@@ -402,6 +405,37 @@ app.get("/api/integrations", (_req, res) => {
 // ---- activity / stats / report ---------------------------------------------------------------
 
 app.get("/api/activity", (_req, res) => res.json(store.getActivity()));
+
+// ---- spend cap ---------------------------------------------------------------
+app.get("/api/budget", (_req, res) => {
+  res.json(Object.assign(budget.status(), { config: budget.getConfig(), prices: budget.PRICES }));
+});
+app.put("/api/budget", (req, res) => {
+  const cap = Number((req.body || {}).monthlyCapAUD);
+  if (!Number.isFinite(cap) || cap < 0) return res.status(400).json({ error: "monthlyCapAUD must be a positive number." });
+  budget.setConfig({ monthlyCapAUD: cap });
+  res.json(Object.assign(budget.status(), { config: budget.getConfig() }));
+});
+
+// ---- GoHighLevel publishing ---------------------------------------------------
+app.get("/api/ghl/health", async (_req, res) => {
+  res.json(await ghl.health());
+});
+app.post("/api/ghl/publish/:id", async (req, res) => {
+  const posts = store.getPosts();
+  const post = posts.find((p) => p.id === req.params.id);
+  if (!post) return res.status(404).json({ error: "Post not found." });
+  if (!ghl.isConfigured()) return res.status(400).json({ error: "GoHighLevel isn't connected." });
+  const out = await ghl.publishPost(post);
+  if (!out.ok) return res.status(502).json({ error: out.reason });
+  post.status = "published";
+  post.publishedAt = new Date().toISOString();
+  post.simulated = false;
+  post.ghlPostId = out.id || null;
+  store.savePosts(posts);
+  store.logActivity("published", `Published ${post.platform} post via GoHighLevel (manual) — ${(out.accounts||[]).join(", ")}`, post.id);
+  res.json(post);
+});
 
 app.get("/api/tasks", (_req, res) => res.json(store.getCol("tasks")));
 app.patch("/api/tasks/:id", (req, res) => {

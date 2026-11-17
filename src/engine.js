@@ -7,6 +7,7 @@
 const { toolSchemas, makeHandlers, PLATFORMS } = require("./tools");
 const { buildSystemPrompt } = require("./prompt");
 const store = require("./store");
+const budget = require("./budget");
 const dt = require("./datetime");
 
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
@@ -35,6 +36,16 @@ function trimHistory(history, max = 24) {
 // ---- LIVE ------------------------------------------------------------------
 
 async function respondLive(session, userMessage, employeeId) {
+  // Paid work — check the monthly ceiling before calling out.
+  const allowed = budget.canSpend("claude.message");
+  if (!allowed.ok) {
+    return {
+      reply: `I've hit the spend limit, so I can't think properly right now. ${allowed.reason}`,
+      actions: [],
+      steps: [],
+      blockedByBudget: true,
+    };
+  }
   const base = dt.now();
   const handlers = makeHandlers(base);
   let system = buildSystemPrompt(store.getProfile(), base);
@@ -80,6 +91,7 @@ async function respondLive(session, userMessage, employeeId) {
     }
 
     const reply = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    budget.record("claude.message", 1, "chat turn");
     return { reply, actions, steps };
   }
 

@@ -1,28 +1,61 @@
 // The publishing pipeline: every 30s, find scheduled posts that are due and
-// publish them. v1 is an HONEST SIMULATION — the pipeline genuinely fires on
-// time and logs it, but no real platform API is called yet (that's the v2
-// seam: swap the body of publish() for real Instagram/Facebook/TikTok calls).
+// publish them.
+//
+// If GoHighLevel is connected, posts go out for real through its Social
+// Planner (which holds the Instagram/Facebook/TikTok publishing approvals).
+// If it isn't, the pipeline still fires exactly on time but the post is
+// marked `simulated` and labelled as preview — we never claim it was posted.
 
 const store = require("./store");
 const events = require("./events");
 const employees = require("./employees");
+const ghl = require("./ghl");
 
 const TICK_MS = 30 * 1000;
 let pausedLogged = false;
 
-function publish(post, note) {
+function snippet(post) {
+  return `"${post.content.slice(0, 50)}${post.content.length > 50 ? "…" : ""}"`;
+}
+
+function markPublished(post, { live, detail, note }) {
   post.status = "published";
   post.publishedAt = new Date().toISOString();
-  post.simulated = true;
+  post.simulated = !live;
   store.logActivity(
     "published",
-    `Published ${post.platform} post (simulated)${note ? ` ${note}` : ""} — "${post.content.slice(0, 50)}${post.content.length > 50 ? "…" : ""}"`,
+    live
+      ? `Published ${post.platform} post via GoHighLevel${detail ? ` → ${detail}` : ""} — ${snippet(post)}`
+      : `Published ${post.platform} post (preview — no platform connected)${note ? ` ${note}` : ""} — ${snippet(post)}`,
     post.id
   );
   events.emit("post.published", { postId: post.id, summary: post.content.slice(0, 60) });
 }
 
-function runDue(note) {
+function markFailed(post, reason) {
+  post.status = "failed";
+  post.failedAt = new Date().toISOString();
+  post.failureReason = reason;
+  store.logActivity("failed", `Couldn't publish ${post.platform} post — ${reason}`, post.id);
+}
+
+// Returns true if the post was dealt with (published or failed).
+async function publish(post, note) {
+  if (!ghl.isConfigured()) {
+    markPublished(post, { live: false, note });
+    return;
+  }
+  const out = await ghl.publishPost(post);
+  if (out.ok) {
+    post.ghlPostId = out.id || null;
+    markPublished(post, { live: true, detail: (out.accounts || []).join(", ") });
+  } else {
+    // A real failure is worth surfacing — don't quietly pretend it published.
+    markFailed(post, out.reason);
+  }
+}
+
+async function runDue(note) {
   const posts = store.getPosts();
   const now = new Date();
   let fired = 0;
@@ -36,11 +69,14 @@ function runDue(note) {
     }
   } else {
     if (sage.enabled) pausedLogged = false;
+    // sequential on purpose: GHL rate-limits, and a burst of posts going out
+    // at once is rarely what anyone wants anyway
     for (const post of due) {
-      publish(post, note);
+      await publish(post, note);
       fired++;
     }
   }
+  // written after the awaits so the saved state reflects what actually happened
   if (fired) store.savePosts(posts);
 
   // tasks coming due → surface them once
@@ -49,7 +85,7 @@ function runDue(note) {
   for (const t of tasks) {
     if (t.status === "open" && t.dueAt && new Date(t.dueAt) <= now) {
       t.status = "due";
-      store.logActivity("task", `⏰ Task due: ${t.what}`, t.id);
+      store.logActivity("task", `Task due: ${t.what}`, t.id);
       dued++;
     }
   }
@@ -58,14 +94,28 @@ function runDue(note) {
 }
 
 function start() {
+  let running = false;
+  // a slow GHL call must not let the next tick start a second pass over the
+  // same due posts and publish them twice
+  async function tick(note) {
+    if (running) return;
+    running = true;
+    try {
+      const fired = await runDue(note);
+      if (fired) console.log(`Scheduler: handled ${fired} item(s)`);
+    } catch (e) {
+      console.error("Scheduler tick failed:", e.message);
+    } finally {
+      running = false;
+    }
+  }
+
   // Boot catch-up: anything that came due while the server was off
-  const caught = runDue("(caught up on startup)");
-  if (caught) console.log(`Scheduler: published ${caught} overdue post(s) on startup`);
-  setInterval(() => {
-    const fired = runDue();
-    if (fired) console.log(`Scheduler: published ${fired} post(s)`);
-  }, TICK_MS);
-  console.log("Scheduler: running (30s tick, simulated publishing)");
+  tick("(caught up on startup)");
+  setInterval(tick, TICK_MS);
+  console.log(
+    `Scheduler: running (30s tick, publishing ${ghl.isConfigured() ? "LIVE via GoHighLevel" : "in PREVIEW — GoHighLevel not connected"})`
+  );
 }
 
 module.exports = { start, runDue };

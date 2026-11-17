@@ -709,11 +709,51 @@
   HL.pages.settings = {
     title: "Settings & Knowledge",
     render: function () {
-      return HL.api("/api/knowledge").then(function (kb) {
+      return Promise.all([HL.api("/api/knowledge"), HL.api("/api/budget")]).then(function (res) {
+        var kb = res[0], bud = res[1];
         var root = HL.el("div");
         var intro = HL.el("p", "sec-intro");
         intro.innerHTML = "Your AI team answers customers only from what's in here.";
         root.appendChild(intro);
+
+        /* ---- spend cap ---- */
+        var bp = HL.panel("AI spend cap", bud.month);
+        var bb = HL.el("div", "panel-body");
+        var bar = HL.el("div", "spend-bar");
+        var fill = HL.el("i");
+        fill.style.width = Math.min(100, bud.percent) + "%";
+        if (bud.percent >= 100) fill.classList.add("full");
+        else if (bud.percent >= 80) fill.classList.add("warn");
+        bar.appendChild(fill);
+        var line = HL.el("div", "spend-line");
+        line.innerHTML = "<strong>A$" + bud.spent.toFixed(2) + "</strong> of A$" + bud.cap +
+          " used this month · <span>A$" + bud.remaining.toFixed(2) + " left</span>";
+        bb.appendChild(line);
+        bb.appendChild(bar);
+        if (bud.exhausted) {
+          bb.appendChild(HL.el("div", "spend-note", "Cap reached — paid AI work is paused until you raise it or the month rolls over."));
+        }
+        var row = HL.el("div", "frow");
+        row.style.marginTop = "14px";
+        var capIn = HL.input("Monthly cap in AUD", String(bud.cap));
+        capIn.type = "number"; capIn.min = "0"; capIn.step = "5";
+        row.appendChild(HL.field("Monthly cap (A$)", capIn));
+        var saveCap = HL.el("button", "btn", "Save cap");
+        saveCap.style.alignSelf = "flex-end";
+        saveCap.addEventListener("click", function () {
+          HL.post("/api/budget", { monthlyCapAUD: Number(capIn.value) }, "PUT")
+            .then(function () { HL.toast("Spend cap updated"); HL.navigate(); })
+            .catch(function (e) { HL.toast(e.message, true); });
+        });
+        var wrapBtn = HL.el("div", "field");
+        wrapBtn.appendChild(HL.el("label", null, " "));
+        wrapBtn.appendChild(saveCap);
+        row.appendChild(wrapBtn);
+        bb.appendChild(row);
+        bb.appendChild(HL.el("div", "spend-note",
+          "The AI spends freely under this ceiling and stops dead when it's hit. Rough costs: chat ~1c a turn, image ~6c, video ~5c per second."));
+        bp.appendChild(bb);
+        root.appendChild(bp);
 
         var panel = HL.panel("Business knowledge base", kb.updatedAt ? "Updated " + HL.fmtWhen(kb.updatedAt) : "Not filled in yet");
         var body = HL.el("div", "panel-body");
