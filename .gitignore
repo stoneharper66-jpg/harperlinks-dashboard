@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# runtime data (created on first run)
+data/*.json
+
+# os
+.DS_Store
+*.log

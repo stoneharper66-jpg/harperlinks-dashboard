@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HarperLinks — Business OS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="HarperLinks Business OS — AI employees, automations, CRM, calendar and content, one dashboard." />
+<meta name="theme-color" content="#0A0B10" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="gradStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/><stop offset="100%" stop-color="#FF2D92"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="os">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="/" aria-label="HarperLinks home">
+      <svg class="logo-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+        <path d="M15 21l6-6" stroke="url(#gradStroke)" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M13 23l-2.5 2.5a5 5 0 01-7-7L8 14a5 5 0 017 0" stroke="#0A84FF" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+        <path d="M23 13l2.5-2.5a5 5 0 017 7L28 22a5 5 0 01-7 0" stroke="#FF2D92" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+      </svg>
+      <span class="logo-word">Harper<b>Links</b></span>
+    </a>
+    <nav class="side-nav" id="sideNav" aria-label="Dashboard sections"></nav>
+    <div class="side-foot">
+      <span class="mode-badge" id="modeBadge"><span class="dot"></span><span id="modeLabel">…</span></span>
+    </div>
+  </aside>
+
+  <div class="os-main">
+    <header class="os-topbar">
+      <button class="side-toggle" id="sideToggle" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="22" height="22"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+      <h1 class="page-title" id="pageTitle">Overview</h1>
+      <div class="topbar-right">
+        <span class="top-date" id="topDate"></span>
+        <a class="back-link" id="siteLink" href="#" hidden>Site ↗</a>
+      </div>
+    </header>
+    <main class="view" id="view" aria-live="polite"></main>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="app.js"></script>
+<script src="social.js"></script>
+<script src="pages.js"></script>
+<script>HL.boot();</script>
+</body>
+</html>

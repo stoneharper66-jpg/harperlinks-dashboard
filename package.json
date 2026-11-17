@@ -1,0 +1,16 @@
+{
+  "name": "harperlinks-automation",
+  "version": "0.1.0",
+  "description": "HarperLinks — business automation platform: AI content bot, website ingestion, smart calendar, auto-posting.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "dotenv": "^17.0.0",
+    "express": "^4.21.0"
+  }
+}
