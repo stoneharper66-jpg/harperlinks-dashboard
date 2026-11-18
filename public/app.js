@@ -22,6 +22,8 @@
   HL.api = function (path, opts) {
     return fetch(path, opts).then(function (r) {
       return r.json().then(function (d) {
+        // session expired or signed out elsewhere → back to the door
+        if (r.status === 401 && d.authRequired) { location.href = "/login.html"; throw new Error("Please sign in."); }
         if (!r.ok) throw new Error(d.error || "Request failed");
         return d;
       });
@@ -29,6 +31,40 @@
   };
   HL.post = function (path, body, method) {
     return HL.api(path, { method: method || "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  };
+
+  // POST that reads server-sent events back as they arrive. onEvent fires per
+  // event; the promise settles when the stream closes. Rejects if the browser
+  // can't stream, so callers can fall back to a plain POST.
+  HL.stream = function (path, body, onEvent) {
+    if (!window.ReadableStream || !window.TextDecoder) {
+      return Promise.reject(new Error("no streaming"));
+    }
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    }).then(function (r) {
+      if (!r.ok || !r.body) throw new Error("Request failed");
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = "";
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) return;
+          buf += decoder.decode(res.value, { stream: true });
+          var parts = buf.split("\n\n"); // events are separated by a blank line
+          buf = parts.pop();
+          parts.forEach(function (chunk) {
+            var line = chunk.split("\n").filter(function (l) { return l.indexOf("data:") === 0; })[0];
+            if (!line) return;
+            try { onEvent(JSON.parse(line.slice(5).trim())); } catch (e) { /* partial frame */ }
+          });
+          return pump();
+        });
+      }
+      return pump();
+    });
   };
 
   HL.toast = function (msg, isErr) {
@@ -258,12 +294,16 @@
     { id: "team", label: "Team", icon: IC.team },
     { id: "settings", label: "Settings & Knowledge", icon: IC.settings },
     { id: "billing", label: "Billing", icon: IC.billing },
+    { sep: "HarperLinks HQ", admin: true },
+    { id: "accounts", label: "Customer Accounts", icon: IC.team, admin: true },
   ];
 
   function renderNav() {
     var nav = HL.$("sideNav");
     nav.innerHTML = "";
+    var isAdmin = HL.user && HL.user.role === "admin";
     HL.NAV.forEach(function (item) {
+      if (item.admin && !isAdmin) return; // customers never see HQ pages
       if (item.sep) {
         nav.appendChild(HL.el("div", "side-sep", item.sep));
         return;
@@ -322,6 +362,39 @@
 
   /* ---------- boot ---------- */
   HL.boot = function () {
+    // Who's signed in decides what renders — nothing draws until we know.
+    HL.api("/api/auth/me").then(function (me) {
+      HL.user = me.user;
+      var chip = HL.$("userChip");
+      if (chip) {
+        chip.textContent = me.user.name + (me.user.role === "admin" ? " · HQ" : "");
+        chip.hidden = false;
+        chip.style.cursor = "pointer";
+        chip.title = "Change password";
+        chip.addEventListener("click", function () {
+          var body = HL.el("div");
+          var cur = HL.input("Current password"); cur.type = "password";
+          var nxt = HL.input("New password — at least 8 characters"); nxt.type = "password";
+          body.appendChild(HL.field("Current password", cur));
+          body.appendChild(HL.field("New password", nxt));
+          HL.modal("Change password", body, function () {
+            return HL.post("/api/auth/password", { current: cur.value, next: nxt.value })
+              .then(function () { HL.toast("Password changed"); });
+          }, "Change");
+        });
+      }
+      var out = HL.$("logoutBtn");
+      if (out) {
+        out.hidden = false;
+        out.addEventListener("click", function () {
+          HL.post("/api/auth/logout").then(function () { location.href = "/login.html"; });
+        });
+      }
+      bootShell();
+    }).catch(function () { /* HL.api already redirected to /login.html */ });
+  };
+
+  function bootShell() {
     renderNav();
     if (HL.SITE_URL && HL.SITE_URL.trim()) {
       var sl = HL.$("siteLink");
@@ -338,5 +411,5 @@
     HL.refreshHealth();
     setInterval(HL.refreshHealth, 30000);
     HL.navigate();
-  };
+  }
 })();

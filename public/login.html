@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sign in — HarperLinks</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0A0B10" />
+<link rel="stylesheet" href="app.css" />
+<style>
+  .gate{min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(10,132,255,.14), transparent 60%),
+      radial-gradient(900px 500px at 95% 110%, rgba(255,45,146,.12), transparent 60%),
+      var(--bg, #0A0B10)}
+  .gate-card{width:min(420px,100%);background:var(--panel,rgba(255,255,255,.03));border:1px solid var(--border,rgba(255,255,255,.1));
+    border-radius:20px;padding:34px 30px;backdrop-filter:blur(14px)}
+  .gate-brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
+  .gate-brand .logo-word{font-size:21px}
+  .gate-sub{text-align:center;color:var(--muted,#A3A8B8);font-size:13.5px;margin:0 0 26px}
+  .gate-field{margin-bottom:14px}
+  .gate-field label{display:block;font-size:12px;color:var(--muted,#A3A8B8);margin-bottom:6px;font-weight:600}
+  .gate-field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,.12));
+    background:rgba(255,255,255,.04);color:var(--text,#EDEFF5);font-size:14.5px;outline:none;transition:border-color .2s}
+  .gate-field input:focus{border-color:#0A84FF}
+  .gate-btn{width:100%;margin-top:8px;padding:13px;border:none;border-radius:12px;cursor:pointer;font-weight:700;font-size:15px;
+    color:#fff;background:linear-gradient(120deg,#0A84FF,#FF2D92);transition:opacity .2s,transform .15s}
+  .gate-btn:hover{opacity:.92;transform:translateY(-1px)}
+  .gate-btn:disabled{opacity:.5;cursor:default;transform:none}
+  .gate-err{display:none;margin:0 0 14px;padding:10px 13px;border-radius:10px;font-size:13px;
+    background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.3);color:#ff9d9d}
+  .gate-note{margin-top:18px;text-align:center;color:var(--dim,#5E6372);font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gradStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0A84FF"/><stop offset="100%" stop-color="#FF2D92"/>
+  </linearGradient>
+</defs></svg>
+
+<div class="gate">
+  <form class="gate-card" id="form" autocomplete="on">
+    <div class="gate-brand">
+      <svg class="logo-mark" viewBox="0 0 36 36" fill="none" width="30" height="30" aria-hidden="true">
+        <path d="M15 21l6-6" stroke="url(#gradStroke)" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M13 23l-2.5 2.5a5 5 0 01-7-7L8 14a5 5 0 017 0" stroke="#0A84FF" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+        <path d="M23 13l2.5-2.5a5 5 0 017 7L28 22a5 5 0 01-7 0" stroke="#FF2D92" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+      </svg>
+      <span class="logo-word">Harper<b>Links</b></span>
+    </div>
+    <p class="gate-sub" id="sub">Sign in to your dashboard</p>
+    <p class="gate-err" id="err"></p>
+
+    <div class="gate-field" id="nameWrap" style="display:none">
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" autocomplete="name" />
+    </div>
+    <div class="gate-field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required />
+    </div>
+    <div class="gate-field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+    </div>
+    <button class="gate-btn" id="btn" type="submit">Sign in</button>
+    <p class="gate-note" id="note">Your account is set up personally by the HarperLinks team.<br/>No account yet? Head to the website and pick a plan.</p>
+  </form>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var setup = false;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Fresh install (no admin yet) → this page becomes the one-time setup form.
+  fetch("/api/auth/me").then(function (r) {
+    if (r.ok) { location.href = "/"; return null; }
+    return r.json();
+  }).then(function (d) {
+    if (d && d.needsSetup) {
+      setup = true;
+      $("sub").textContent = "First run — create the owner account";
+      $("nameWrap").style.display = "";
+      $("btn").textContent = "Create owner account";
+      $("note").innerHTML = "This only appears once. You'll use this account to run HarperLinks<br/>and create your customers' accounts.";
+      $("password").autocomplete = "new-password";
+    }
+  }).catch(function () {});
+
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var btn = $("btn"), err = $("err");
+    btn.disabled = true;
+    err.style.display = "none";
+    fetch(setup ? "/api/auth/setup" : "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("name").value, email: $("email").value, password: $("password").value }),
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (out) {
+        if (!out.ok) throw new Error(out.d.error || "That didn't work — try again.");
+        location.href = "/";
+      })
+      .catch(function (ex) {
+        err.textContent = ex.message;
+        err.style.display = "block";
+        btn.disabled = false;
+      });
+  });
+})();
+</script>
+</body>
+</html>

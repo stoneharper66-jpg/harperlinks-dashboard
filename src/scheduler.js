@@ -7,12 +7,13 @@
 // marked `simulated` and labelled as preview — we never claim it was posted.
 
 const store = require("./store");
+const tenant = require("./tenant");
 const events = require("./events");
 const employees = require("./employees");
 const ghl = require("./ghl");
 
 const TICK_MS = 30 * 1000;
-let pausedLogged = false;
+const pausedLogged = new Set(); // account ids we've already warned for
 
 function snippet(post) {
   return `"${post.content.slice(0, 50)}${post.content.length > 50 ? "…" : ""}"`;
@@ -61,14 +62,15 @@ async function runDue(note) {
   let fired = 0;
   const due = posts.filter((p) => p.status === "scheduled" && p.scheduledAt && new Date(p.scheduledAt) <= now);
   // The publisher is Sage's job — if Sage is switched off, due posts wait.
+  const acct = tenant.current();
   const sage = employees.getState("social");
   if (due.length && !sage.enabled) {
-    if (!pausedLogged) {
+    if (!pausedLogged.has(acct)) {
       store.logActivity("paused", `${due.length} due post(s) are waiting — Sage is switched off. Enable Sage in AI Employees to resume publishing.`);
-      pausedLogged = true;
+      pausedLogged.add(acct);
     }
   } else {
-    if (sage.enabled) pausedLogged = false;
+    if (sage.enabled) pausedLogged.delete(acct);
     // sequential on purpose: GHL rate-limits, and a burst of posts going out
     // at once is rarely what anyone wants anyway
     for (const post of due) {
@@ -101,8 +103,12 @@ function start() {
     if (running) return;
     running = true;
     try {
-      const fired = await runDue(note);
-      if (fired) console.log(`Scheduler: handled ${fired} item(s)`);
+      // every customer's queue gets a pass, each inside its own account
+      // context so posts, logs and GHL credentials never cross accounts
+      for (const id of store.listAccountIds()) {
+        const fired = await tenant.run(id, () => runDue(note));
+        if (fired) console.log(`Scheduler [${id}]: handled ${fired} item(s)`);
+      }
     } catch (e) {
       console.error("Scheduler tick failed:", e.message);
     } finally {
@@ -113,9 +119,7 @@ function start() {
   // Boot catch-up: anything that came due while the server was off
   tick("(caught up on startup)");
   setInterval(tick, TICK_MS);
-  console.log(
-    `Scheduler: running (30s tick, publishing ${ghl.isConfigured() ? "LIVE via GoHighLevel" : "in PREVIEW — GoHighLevel not connected"})`
-  );
+  console.log("Scheduler: running (30s tick across all accounts; live publishing per account once its GoHighLevel is connected)");
 }
 
 module.exports = { start, runDue };

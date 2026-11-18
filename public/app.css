@@ -332,6 +332,10 @@ a{color:inherit;text-decoration:none}
 .cc-sug svg{width:18px;height:18px;flex-shrink:0;stroke:var(--dim);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .cc-sug:hover svg{stroke:var(--accent)}
 
+/* who's signed in */
+.user-chip{font-size:12.5px;color:var(--muted);padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.03);white-space:nowrap}
+button.back-link{background:none;border:none;cursor:pointer;font:inherit}
+
 /* thinking block */
 .typing .tverb{font-size:12.5px;color:var(--dim);margin-right:8px}
 .think{align-self:flex-start;max-width:82%;border:1px solid var(--border);background:rgba(123,92,255,.05);border-radius:13px;overflow:hidden}
@@ -345,6 +349,12 @@ a{color:inherit;text-decoration:none}
 .think-row{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
 .think-row .tok{color:var(--ok);font-weight:700}
 .think-row .tbad{color:var(--warn);font-weight:700}
+/* a step that has started but hasn't finished — spins until the server says so */
+.think-row.pending{color:var(--dim)}
+.think-row .tspin{flex:none;width:11px;height:11px;border-radius:50%;
+  border:1.6px solid var(--border);border-top-color:var(--accent2);animation:tspin .7s linear infinite}
+@keyframes tspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.think-row .tspin{animation:none}}
 
 /* ===================== chat (social page) ===================== */
 .chat-panel{display:flex;flex-direction:column;min-height:0;height:100%}

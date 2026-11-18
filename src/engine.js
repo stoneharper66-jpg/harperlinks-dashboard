@@ -35,7 +35,8 @@ function trimHistory(history, max = 24) {
 
 // ---- LIVE ------------------------------------------------------------------
 
-async function respondLive(session, userMessage, employeeId) {
+async function respondLive(session, userMessage, employeeId, onStep) {
+  const emit = typeof onStep === "function" ? onStep : () => {};
   // Paid work — check the monthly ceiling before calling out.
   const allowed = budget.canSpend("claude.message");
   if (!allowed.ok) {
@@ -60,6 +61,10 @@ async function respondLive(session, userMessage, employeeId) {
   const steps = [];
 
   for (let i = 0; i < 10; i++) {
+    // "I'm deciding what to do" — the gap before a tool call, which is most of
+    // the wait. Told as it happens, not guessed at afterwards.
+    emit({ phase: "model", round: i });
+
     const resp = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2048,
@@ -76,8 +81,12 @@ async function respondLive(session, userMessage, employeeId) {
       for (const block of resp.content) {
         if (block.type !== "tool_use") continue;
         const handler = handlers[block.name];
+        // announce before running, so a slow tool (a website fetch) shows as
+        // in-progress rather than appearing only once it has finished
+        emit({ phase: "tool-start", tool: block.name });
         const out = handler ? await handler(block.input) : { ok: false, content: "Tool not found." };
         steps.push({ tool: block.name, ok: out.ok !== false });
+        emit({ phase: "step", tool: block.name, ok: out.ok !== false });
         if (out.action) actions.push(out.action);
         results.push({
           type: "tool_result",
@@ -126,7 +135,8 @@ function demoCaption(profile, platform, i) {
   return { content: shapes[i % shapes.length], hashtags: tags };
 }
 
-async function respondDemo(session, userMessage) {
+async function respondDemo(session, userMessage, onStep) {
+  const emit = typeof onStep === "function" ? onStep : () => {};
   const base = dt.now();
   const handlers = makeHandlers(base);
   const text = userMessage.toLowerCase();
@@ -134,8 +144,10 @@ async function respondDemo(session, userMessage) {
   const steps = [];
   const say = (reply) => ({ reply, actions, steps });
   const run = async (name, input) => {
+    emit({ phase: "tool-start", tool: name });
     const out = await handlers[name](input);
     steps.push({ tool: name, ok: out.ok !== false });
+    emit({ phase: "step", tool: name, ok: out.ok !== false });
     if (out.action) actions.push(out.action);
     return out;
   };
@@ -270,9 +282,11 @@ function whenPhrase(message) {
   return m ? m[0] : null;
 }
 
-async function respond(session, userMessage, employeeId) {
-  if (HAS_KEY) return respondLive(session, userMessage, employeeId);
-  return respondDemo(session, userMessage);
+// onStep (optional) is called as the work happens, for the streaming route.
+// Callers that just want the finished answer can ignore it entirely.
+async function respond(session, userMessage, employeeId, onStep) {
+  if (HAS_KEY) return respondLive(session, userMessage, employeeId, onStep);
+  return respondDemo(session, userMessage, onStep);
 }
 
 module.exports = { respond, mode, MODEL };

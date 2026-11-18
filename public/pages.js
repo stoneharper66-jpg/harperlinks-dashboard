@@ -678,6 +678,13 @@
           var main = HL.el("div", "lmain");
           main.appendChild(HL.el("div", "lname", it.name));
           main.appendChild(HL.el("div", "lsub", it.desc));
+          // live status straight from the provider (why it's not connected, or
+          // what it can actually reach) — only present for checks we really run
+          if (it.detail) {
+            var d = HL.el("div", "lsub", it.detail);
+            d.style.cssText = "margin-top:3px;opacity:.75;font-size:12.5px";
+            main.appendChild(d);
+          }
           row.appendChild(main);
           var ctl = HL.el("div", "lctl");
           if (it.connected) {
@@ -1035,6 +1042,102 @@
       });
       root.appendChild(grid);
       return Promise.resolve(root);
+    },
+  };
+
+  /* ===================== Customer Accounts (admin only) ===================== */
+  HL.pages.accounts = {
+    title: "Customer Accounts",
+    render: function () {
+      if (!HL.user || HL.user.role !== "admin") {
+        return Promise.resolve(HL.emptyState("🔒", "This page is for the HarperLinks team."));
+      }
+      return HL.api("/api/accounts").then(function (users) {
+        var root = HL.el("div");
+        root.appendChild(HL.el("p", "sec-intro", "Every paying customer gets their own account here — their data, posts and connections are completely separate from everyone else's."));
+
+        var addWrap = HL.el("div");
+        addWrap.style.cssText = "max-width:720px;margin:0 auto 14px;display:flex;justify-content:flex-end";
+        var addBtn = HL.el("button", "btn", "+ New customer account");
+        addBtn.addEventListener("click", function () {
+          var body = HL.el("div");
+          var biz = HL.input("Business name — e.g. Bella's Cafe");
+          var nm = HL.input("Owner's name");
+          var em = HL.input("Their email (this is their sign-in)");
+          var pw = HL.input("Temporary password (they can change it later)");
+          body.appendChild(HL.field("Business", biz));
+          body.appendChild(HL.field("Owner", nm));
+          body.appendChild(HL.field("Email", em));
+          body.appendChild(HL.field("Temporary password — at least 8 characters", pw));
+          HL.modal("New customer account", body, function () {
+            return HL.post("/api/accounts", { business: biz.value, name: nm.value, email: em.value, password: pw.value })
+              .then(function () { HL.toast("Account created — they can sign in now"); HL.navigate(); });
+          }, "Create account");
+        });
+        addWrap.appendChild(addBtn);
+        root.appendChild(addWrap);
+
+        var list = HL.el("div", "rowlist");
+        list.style.cssText = "max-width:720px;margin:0 auto";
+        var customers = users.filter(function (u) { return u.role !== "admin"; });
+        if (!customers.length) {
+          root.appendChild(HL.emptyState("🏁", "No customers yet. When someone pays, create their account here and set them up within 7 days."));
+          return root;
+        }
+        customers.forEach(function (u) {
+          var row = HL.el("div", "lrow");
+          row.appendChild(HL.el("div", "mono" + (u.disabled ? "" : " on"), (u.name || "?").charAt(0).toUpperCase()));
+          var main = HL.el("div", "lmain");
+          main.appendChild(HL.el("div", "lname", u.name + (u.disabled ? " — disabled" : "")));
+          main.appendChild(HL.el("div", "lsub", u.email + " · account: " + u.accountId));
+          row.appendChild(main);
+          var ctl = HL.el("div", "lctl");
+          ctl.style.cssText = "display:flex;gap:7px;flex-wrap:wrap";
+
+          var ghlBtn = HL.el("button", "btn ghost sm", "GoHighLevel");
+          ghlBtn.addEventListener("click", function () {
+            var body = HL.el("div");
+            var note = HL.el("p", null, "Paste this customer's GHL Private Integration token and location id. Saved into their account only, checked against GHL immediately, never shown again.");
+            note.style.cssText = "color:var(--muted);font-size:13px;line-height:1.55";
+            var tok = HL.input("pit-…");
+            var loc = HL.input("Location id");
+            body.appendChild(note);
+            body.appendChild(HL.field("Private Integration token", tok));
+            body.appendChild(HL.field("Location id", loc));
+            HL.modal("Connect GoHighLevel — " + u.accountId, body, function () {
+              return HL.post("/api/accounts/" + u.accountId + "/ghl", { token: tok.value, locationId: loc.value })
+                .then(function (out) {
+                  HL.toast(out.connected ? "Connected · " + (out.detail || "working") : "Saved, but not working: " + out.detail, !out.connected);
+                });
+            }, "Save & test");
+          });
+          ctl.appendChild(ghlBtn);
+
+          var pwBtn = HL.el("button", "btn ghost sm", "Reset password");
+          pwBtn.addEventListener("click", function () {
+            var body = HL.el("div");
+            var pw = HL.input("New password — at least 8 characters");
+            body.appendChild(HL.field("New password for " + u.email, pw));
+            HL.modal("Reset password", body, function () {
+              return HL.post("/api/accounts/" + u.id, { password: pw.value }, "PATCH")
+                .then(function () { HL.toast("Password updated"); });
+            }, "Update");
+          });
+          ctl.appendChild(pwBtn);
+
+          var disBtn = HL.el("button", "btn ghost sm", u.disabled ? "Re-enable" : "Disable");
+          disBtn.addEventListener("click", function () {
+            HL.post("/api/accounts/" + u.id, { disabled: !u.disabled }, "PATCH")
+              .then(function () { HL.toast(u.disabled ? "Account re-enabled" : "Account disabled — they can't sign in"); HL.navigate(); });
+          });
+          ctl.appendChild(disBtn);
+
+          row.appendChild(ctl);
+          list.appendChild(row);
+        });
+        root.appendChild(list);
+        return root;
+      });
     },
   };
 })();

@@ -18,11 +18,26 @@
 const API = "https://services.leadconnectorhq.com";
 const TIMEOUT_MS = 20000;
 
+const store = require("./store");
+const tenant = require("./tenant");
+
+// Each customer account carries its own GHL token + location (set by the
+// admin during white-glove setup). The founding account can still fall back
+// to .env so Stone's original single-tenant config keeps working.
 function config() {
+  const saved = store.getCol("ghl-config", {});
+  const isMain = tenant.current() === tenant.MAIN;
   return {
-    token: (process.env.GHL_TOKEN || "").trim(),
-    locationId: (process.env.GHL_LOCATION_ID || "").trim(),
+    token: String(saved.token || (isMain ? process.env.GHL_TOKEN : "") || "").trim(),
+    locationId: String(saved.locationId || (isMain ? process.env.GHL_LOCATION_ID : "") || "").trim(),
   };
+}
+
+function saveConfig({ token, locationId }) {
+  const cfg = store.getCol("ghl-config", {});
+  if (token !== undefined) cfg.token = String(token || "").trim();
+  if (locationId !== undefined) cfg.locationId = String(locationId || "").trim();
+  store.saveCol("ghl-config", cfg);
 }
 
 function isConfigured() {
@@ -149,4 +164,4 @@ async function health() {
   }
 }
 
-module.exports = { isConfigured, listAccounts, publishPost, health };
+module.exports = { isConfigured, saveConfig, listAccounts, publishPost, health };

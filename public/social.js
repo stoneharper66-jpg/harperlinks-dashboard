@@ -17,8 +17,6 @@
     add_task: "Adding the task",
   };
 
-  var THINK_VERBS = ["Thinking…", "Working on it…", "Checking your business…", "Lining things up…"];
-
   /* ---------- the shared chat panel ---------- */
   HL.buildChat = function (opts) {
     opts = opts || {};
@@ -54,22 +52,6 @@
       scroll.appendChild(greet);
     }
 
-    function addTyping() {
-      var el = HL.el("div", "typing");
-      el.innerHTML = '<span class="tverb"></span><i></i><i></i><i></i>';
-      var verb = el.querySelector(".tverb");
-      var vi = 0;
-      verb.textContent = THINK_VERBS[0];
-      var timer = setInterval(function () {
-        vi = (vi + 1) % THINK_VERBS.length;
-        verb.textContent = THINK_VERBS[vi];
-      }, 1700);
-      el._stop = function () { clearInterval(timer); };
-      scroll.appendChild(el);
-      scroll.scrollTop = scroll.scrollHeight;
-      return el;
-    }
-
     function addThinking(steps) {
       if (!steps || !steps.length) return;
       var block = HL.el("div", "think");
@@ -89,6 +71,53 @@
       headEl.addEventListener("click", function () { block.classList.toggle("open"); });
       scroll.appendChild(block);
       scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    /* A thinking block that fills in while the work is happening.
+       Every row is driven by a real server event — a row only appears because
+       the bot actually started that tool, and only ticks when it really
+       finished. Nothing here is on a timer. */
+    function startLiveThinking() {
+      var block = HL.el("div", "think open");
+      var headEl = HL.el("button", "think-head");
+      headEl.type = "button";
+      headEl.innerHTML = '<span class="tspark">✦</span><span class="thead-text">Thinking…</span><span class="tchev">▾</span>';
+      var list = HL.el("div", "think-list");
+      block.appendChild(headEl);
+      block.appendChild(list);
+      headEl.addEventListener("click", function () { block.classList.toggle("open"); });
+      scroll.appendChild(block);
+      scroll.scrollTop = scroll.scrollHeight;
+
+      var waiting = {}; // tool name → rows started but not yet finished
+      var done = 0;
+      function label(tool) { return HL.esc(HL.STEP_LABELS[tool] || tool); }
+
+      return {
+        head: function (t) { headEl.querySelector(".thead-text").textContent = t; },
+        toolStart: function (tool) {
+          var r = HL.el("div", "think-row pending");
+          r.innerHTML = '<span class="tspin"></span><span>' + label(tool) + "</span>";
+          list.appendChild(r);
+          (waiting[tool] = waiting[tool] || []).push(r);
+          scroll.scrollTop = scroll.scrollHeight;
+        },
+        stepDone: function (tool, ok) {
+          var r = (waiting[tool] || []).shift();
+          if (!r) { r = HL.el("div", "think-row"); list.appendChild(r); }
+          r.className = "think-row";
+          r.innerHTML = (ok ? '<span class="tok">✓</span>' : '<span class="tbad">!</span>') +
+            "<span>" + label(tool) + "</span>";
+          done++;
+          scroll.scrollTop = scroll.scrollHeight;
+        },
+        finish: function () {
+          headEl.querySelector(".thead-text").textContent =
+            done ? "Did " + done + " step" + (done > 1 ? "s" : "") : "Thought it through";
+          block.classList.remove("open");
+        },
+        remove: function () { block.remove(); },
+      };
     }
 
     /* ---- live-build bench (engaged command centre) ---- */
@@ -145,56 +174,6 @@
       opts.bench.scrollTop = 0;
     }
 
-    // Reveal the work piece by piece so you watch it get built.
-    function playResponse(out, typing, done) {
-      var steps = out.steps || [], actions = out.actions || [];
-      var block = null, list = null;
-      if (steps.length) {
-        block = HL.el("div", "think open");
-        var headEl = HL.el("button", "think-head");
-        headEl.type = "button";
-        headEl.innerHTML = '<span class="tspark">✦</span> Working <span class="tchev">▾</span>';
-        list = HL.el("div", "think-list");
-        block.appendChild(headEl);
-        block.appendChild(list);
-        headEl.addEventListener("click", function () { block.classList.toggle("open"); });
-        scroll.insertBefore(block, typing);
-        scroll.scrollTop = scroll.scrollHeight;
-      }
-      var i = 0;
-      function nextStep() {
-        if (i < steps.length) {
-          var s = steps[i];
-          var r = HL.el("div", "think-row");
-          r.innerHTML = (s.ok ? '<span class="tok">✓</span>' : '<span class="tbad">!</span>') +
-            "<span>" + HL.esc(HL.STEP_LABELS[s.tool] || s.tool) + "</span>";
-          list.appendChild(r);
-          scroll.scrollTop = scroll.scrollHeight;
-          i++;
-          setTimeout(nextStep, 340);
-          return;
-        }
-        if (block) block.querySelector(".think-head").innerHTML =
-          '<span class="tspark">✦</span> Did ' + steps.length + " step" + (steps.length > 1 ? "s" : "") + ' <span class="tchev">▾</span>';
-        var j = 0;
-        function nextBuild() {
-          if (j < actions.length) {
-            benchItem(actions[j]);
-            j++;
-            setTimeout(nextBuild, 300);
-            return;
-          }
-          typing._stop(); typing.remove();
-          if (block) block.classList.remove("open");
-          if (out.reply) addMsg("bot", out.reply);
-          benchStatus(false);
-          done();
-        }
-        nextBuild();
-      }
-      nextStep();
-    }
-
     function addActionCard(action) {
       var rec = action.record;
       var el;
@@ -248,33 +227,49 @@
       }
       addMsg("user", text.trim());
       input.value = "";
-      var typing = addTyping();
       benchStatus(true);
-      HL.post("/api/chat", { sessionId: HL.sessionId, message: text.trim(), employee: opts.employee || undefined })
-        .then(function (out) {
-          if (opts.bench) {
-            playResponse(out, typing, function () {
-              sending = false;
-              input.focus();
-              if (opts.onWorkDone) opts.onWorkDone(out);
-            });
-            return "played";
-          }
-          typing._stop(); typing.remove();
-          addThinking(out.steps);
-          (out.actions || []).forEach(addActionCard);
-          if (out.reply) addMsg("bot", out.reply);
-          if (opts.onWorkDone) opts.onWorkDone(out);
+
+      var payload = { sessionId: HL.sessionId, message: text.trim(), employee: opts.employee || undefined };
+      var live = startLiveThinking();
+      var settled = false;
+
+      function release() { sending = false; input.focus(); }
+      function land(out) {
+        settled = true;
+        live.finish();
+        (out.actions || []).forEach(function (a) { opts.bench ? benchItem(a) : addActionCard(a); });
+        if (out.reply) addMsg("bot", out.reply);
+        benchStatus(false);
+        release();
+        if (opts.onWorkDone) opts.onWorkDone(out);
+      }
+      function fail(msg) {
+        settled = true;
+        live.remove();
+        benchStatus(false);
+        addMsg("bot", "Sorry — " + msg);
+        release();
+      }
+
+      HL.stream("/api/chat/stream", payload, function (ev) {
+        if (ev.phase === "model") live.head("Thinking…");
+        else if (ev.phase === "tool-start") { live.head("Working…"); live.toolStart(ev.tool); }
+        else if (ev.phase === "step") live.stepDone(ev.tool, ev.ok);
+        else if (ev.phase === "done") land(ev);
+        else if (ev.phase === "error") fail(ev.error);
+      })
+        .then(function () {
+          // stream closed without a final event — say so rather than hang
+          if (!settled) fail("the connection dropped mid-answer.");
         })
-        .catch(function (e) {
-          typing._stop(); typing.remove();
-          benchStatus(false);
-          addMsg("bot", "Sorry — " + e.message);
-        })
-        .then(function (played) {
-          if (played === "played") return;
-          sending = false;
-          input.focus();
+        .catch(function () {
+          // older browser, or the stream never opened: fall back to the plain
+          // endpoint, which still works — just without live progress
+          if (settled) return;
+          live.remove();
+          HL.post("/api/chat", payload)
+            .then(function (out) { addThinking(out.steps); land(out); })
+            .catch(function (e) { fail(e.message); });
         });
     }
 

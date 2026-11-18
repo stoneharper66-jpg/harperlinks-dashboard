@@ -5,6 +5,9 @@ const path = require("path");
 const express = require("express");
 
 const engine = require("./src/engine");
+const auth = require("./src/auth");
+const tenant = require("./src/tenant");
+const siteAgent = require("./src/site-agent");
 const store = require("./src/store");
 const scheduler = require("./src/scheduler");
 const employees = require("./src/employees");
@@ -23,10 +26,164 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // The dashboard is its own application now — it lives at the root.
 // /app is kept as a redirect so old links still land somewhere sensible.
-app.get("/", (_req, res) => {
+app.get("/", (req, res) => {
+  // No one signed in → the sign-in page (or first-boot setup) instead of the app.
+  if (!auth.userFromRequest(req)) return res.redirect("/login.html");
   res.sendFile(path.join(__dirname, "public", "app.html"));
 });
 app.get("/app", (_req, res) => res.redirect(301, "/"));
+
+// ============================= sign in / accounts =============================
+
+// Create the very first admin account — only ever works once, on a fresh
+// install, so an attacker can't "set up" an already-running system.
+app.post("/api/auth/setup", (req, res) => {
+  if (auth.hasAdmin()) return res.status(403).json({ error: "Already set up — sign in instead." });
+  try {
+    const { name, email, password } = req.body || {};
+    const user = auth.createUser({ name, email, password, role: "admin", accountId: tenant.MAIN });
+    res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(user.id)));
+    tenant.run(tenant.MAIN, () => store.logActivity("auth", `Admin account created for ${user.email}`));
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body || {};
+  const u = auth.login(email, password);
+  if (!u) return res.status(401).json({ error: "Wrong email or password." });
+  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(u.id)));
+  res.json({ ok: true, user: auth.publicUser(u) });
+});
+
+app.post("/api/auth/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", auth.clearCookie());
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const u = auth.userFromRequest(req);
+  if (!u) return res.status(401).json({ error: "Not signed in.", needsSetup: !auth.hasAdmin() });
+  res.json({ user: auth.publicUser(u) });
+});
+
+// ========================= public website endpoints ==========================
+// Used by the marketing site's chat widget. No sign-in, no cookies, no tenant
+// data — just the sales agent. CORS is wide open because nothing here is
+// credentialed; the dashboard APIs below are NOT CORS-enabled.
+
+const askBuckets = new Map(); // ip → timestamps this minute
+function rateLimited(ip) {
+  const now = Date.now();
+  const hits = (askBuckets.get(ip) || []).filter((t) => now - t < 60_000);
+  hits.push(now);
+  askBuckets.set(ip, hits);
+  if (askBuckets.size > 5000) askBuckets.clear();
+  return hits.length > 10;
+}
+
+app.options("/api/public/ask", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+app.post("/api/public/ask", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").split(",")[0].trim();
+  if (rateLimited(ip)) return res.status(429).json({ error: "Easy on! Give it a few seconds and ask again." });
+  try {
+    const out = await tenant.run(tenant.MAIN, () =>
+      siteAgent.ask((req.body || {}).visitorId, (req.body || {}).message)
+    );
+    res.json(out);
+  } catch (e) {
+    console.error("site agent error:", e.message);
+    res.status(500).json({ error: "The assistant hit a snag — try again in a moment." });
+  }
+});
+
+// ============================== the sign-in gate =============================
+// Everything under /api from here on requires a signed-in user, and runs
+// inside that user's account context — the store physically can't read
+// another customer's folder for the rest of the request.
+
+app.use("/api", (req, res, next) => {
+  const u = auth.userFromRequest(req);
+  if (!u) return res.status(401).json({ error: "Please sign in.", authRequired: true });
+  req.user = u;
+  tenant.run(u.accountId, next);
+});
+
+function adminOnly(req, res, next) {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Only the HarperLinks team can do that." });
+  next();
+}
+
+// Change your own password (any signed-in user).
+app.post("/api/auth/password", (req, res) => {
+  const { current, next: newPass } = req.body || {};
+  if (!auth.login(req.user.email, current)) return res.status(400).json({ error: "Current password is wrong." });
+  try {
+    auth.setPassword(req.user.id, newPass);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- admin: customer accounts ----------------------------------------------
+
+app.get("/api/accounts", adminOnly, (_req, res) => {
+  res.json(auth.getUsers().map(auth.publicUser));
+});
+
+app.post("/api/accounts", adminOnly, (req, res) => {
+  try {
+    const { name, email, password, business } = req.body || {};
+    // the account id comes from the business name: "Bella's Cafe" → bellas-cafe
+    let slug = String(business || name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+    if (!tenant.isValidId(slug)) return res.status(400).json({ error: "Give the business a simple name (letters and numbers)." });
+    const taken = new Set([...store.listAccountIds(), ...auth.getUsers().map((u) => u.accountId)]);
+    let id = slug, n = 2;
+    while (taken.has(id)) id = `${slug}-${n++}`;
+    const user = auth.createUser({ name, email, password, role: "customer", accountId: id });
+    // touch the account folder so the scheduler picks it up straight away
+    tenant.run(id, () => store.logActivity("auth", `Account created for ${business || user.name} by the HarperLinks team`));
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.patch("/api/accounts/:userId", adminOnly, (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.password !== undefined) auth.setPassword(req.params.userId, body.password);
+    if (body.disabled !== undefined) auth.setDisabled(req.params.userId, body.disabled);
+    const u = auth.getUsers().find((x) => x.id === req.params.userId);
+    if (!u) return res.status(404).json({ error: "No such user." });
+    res.json({ ok: true, user: auth.publicUser(u) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Admin drops a customer's GoHighLevel credentials in during white-glove
+// setup. Written into THAT account's folder; never echoed back.
+app.post("/api/accounts/:accountId/ghl", adminOnly, async (req, res) => {
+  const id = req.params.accountId;
+  if (!tenant.isValidId(id)) return res.status(400).json({ error: "Bad account id." });
+  await tenant.run(id, async () => {
+    ghl.saveConfig({ token: (req.body || {}).token, locationId: (req.body || {}).locationId });
+    const status = await ghl.health();
+    store.logActivity("integration", status.connected
+      ? "GoHighLevel connected by the HarperLinks team"
+      : `GoHighLevel details saved but not working yet — ${status.reason}`);
+    res.json({ ok: true, connected: status.connected, detail: status.connected ? (status.accounts || []).map((a) => a.platform).join(", ") : status.reason });
+  });
+});
 
 // ---- chat sessions (in-memory, 30 min TTL) ---------------------------------
 const sessions = new Map();
@@ -62,13 +219,53 @@ app.post("/api/chat", async (req, res) => {
   const { sessionId, message } = req.body || {};
   if (!message || !String(message).trim()) return res.status(400).json({ error: "Message is empty." });
   try {
-    const session = getSession(sessionId);
+    const session = getSession(req.user.accountId + ":" + String(sessionId || "default"));
     const out = await engine.respond(session, String(message).slice(0, 4000), (req.body || {}).employee);
     res.json({ reply: out.reply, actions: out.actions, steps: out.steps || [], mode: engine.mode() });
   } catch (e) {
     console.error("chat error:", e.message);
     res.status(500).json({ error: "The bot hit a snag — try that again." });
   }
+});
+
+// Same work as /api/chat, but the thinking is reported while it happens rather
+// than summarised once it's over. Server-sent events over a POST, so the chat
+// can show real progress during the wait instead of a spinner.
+app.post("/api/chat/stream", async (req, res) => {
+  const { sessionId, message } = req.body || {};
+  if (!message || !String(message).trim()) return res.status(400).json({ error: "Message is empty." });
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no", // don't let a proxy sit on the chunks
+  });
+  const send = (obj) => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  };
+
+  // If the user closes the tab mid-turn, stop writing — the work itself still
+  // finishes, so nothing is left half-done in the datastore.
+  // Listen on the RESPONSE, not the request: for a POST, `req` emits "close"
+  // as soon as the body has been read, which would mute every event.
+  let gone = false;
+  res.on("close", () => { gone = true; });
+
+  try {
+    const session = getSession(req.user.accountId + ":" + String(sessionId || "default"));
+    const out = await engine.respond(
+      session,
+      String(message).slice(0, 4000),
+      (req.body || {}).employee,
+      (ev) => { if (!gone) send(ev); }
+    );
+    send({ phase: "done", reply: out.reply, actions: out.actions, steps: out.steps || [], mode: engine.mode() });
+  } catch (e) {
+    console.error("chat stream error:", e.message);
+    send({ phase: "error", error: "The bot hit a snag — try that again." });
+  }
+  if (!res.writableEnded) res.end();
 });
 
 app.post("/api/reset", (req, res) => {
@@ -384,10 +581,27 @@ app.delete("/api/team/:id", (req, res) => {
 
 // ---- integrations (honest status only) ------------------------------------------------------
 
-app.get("/api/integrations", (_req, res) => {
+app.get("/api/integrations", async (_req, res) => {
+  // Having a token in .env is not the same as the token working. Ask GHL, so a
+  // typo'd or wrong-scope token reads "not connected" with the reason, rather
+  // than showing a green tick that lies right up until a post fails to send.
+  const ghlStatus = await ghl.health();
+
   res.json([
     { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Add ANTHROPIC_API_KEY to .env and restart." },
-    { id: "gohighlevel", name: "GoHighLevel", desc: "Publishes to Instagram, Facebook, TikTok, LinkedIn & YouTube.", connected: ghl.isConfigured(), how: "Connect your socials in GHL Social Planner, then add GHL_TOKEN (scope socialplanner/post.write) and GHL_LOCATION_ID to .env." },
+    {
+      id: "gohighlevel",
+      name: "GoHighLevel",
+      desc: "Publishes to Instagram, Facebook, TikTok, LinkedIn & YouTube.",
+      connected: ghlStatus.connected,
+      // once it's live, say what it can actually post to
+      detail: ghlStatus.connected
+        ? (ghlStatus.accounts || []).length
+          ? `Connected · ${ghlStatus.accounts.map((a) => a.platform).join(", ")}`
+          : "Connected, but no social accounts linked in GHL's Social Planner yet."
+        : ghlStatus.reason,
+      how: "Connect your socials in GHL Social Planner, then add GHL_TOKEN (scope socialplanner/post.write) and GHL_LOCATION_ID to .env.",
+    },
     { id: "instagram", name: "Instagram", desc: "Live publishing & DMs.", connected: false, how: "Requires a Meta developer app + Instagram Graph API approval." },
     { id: "facebook", name: "Facebook", desc: "Page posts & Messenger.", connected: false, how: "Requires a Meta developer app + Pages API access." },
     { id: "tiktok", name: "TikTok", desc: "Video publishing.", connected: false, how: "Requires TikTok Content Posting API approval." },

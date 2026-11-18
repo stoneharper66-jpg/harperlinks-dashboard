@@ -16,8 +16,21 @@ const DEFAULTS = {
 
 // Rough per-unit costs so the ledger means something before real invoices land.
 // These are estimates, not billing truth — reconcile against the provider.
+//
+// All figures are AUD, because the cap is AUD. Anthropic bills USD, so these
+// are the USD list price converted at ~0.65 AUD/USD with a little headroom —
+// better to over-estimate and stop early than to sail past the ceiling.
+//
+// claude.message, on claude-opus-4-8 (US$5/M in, US$25/M out):
+//   a turn carries the system prompt + business profile + recent history
+//   (~2,000 input tokens) and writes a few hundred tokens back (~700 output).
+//   2,000 x $5/1M  = US$0.010
+//     700 x $25/1M = US$0.0175
+//                  = US$0.028  ~  A$0.045
+// Switching ANTHROPIC_MODEL to a cheaper model makes this an over-estimate,
+// which is the safe direction. Update it if you change models for real.
 const PRICES = {
-  "claude.message": 0.01,       // per chat turn, ballpark
+  "claude.message": 0.045,      // per chat turn on Opus 4.8 — see note above
   "image.generate": 0.06,       // per image
   "video.generate": 0.05,       // PER SECOND — multiply by duration
 };
