@@ -1,0 +1,38 @@
+[
+  {
+    "id": "social",
+    "enabled": true,
+    "mode": "autonomous",
+    "activatedAt": "2026-11-17T04:55:58.157Z"
+  },
+  {
+    "id": "support",
+    "enabled": true,
+    "mode": "assisted",
+    "activatedAt": "2026-11-18T04:18:07.057Z"
+  },
+  {
+    "id": "receptionist",
+    "enabled": true,
+    "mode": "assisted",
+    "activatedAt": "2026-11-18T04:18:08.820Z"
+  },
+  {
+    "id": "sales",
+    "enabled": true,
+    "mode": "assisted",
+    "activatedAt": "2026-11-18T04:18:09.705Z"
+  },
+  {
+    "id": "web",
+    "enabled": true,
+    "mode": "assisted",
+    "activatedAt": "2026-11-18T04:18:10.337Z"
+  },
+  {
+    "id": "manager",
+    "enabled": true,
+    "mode": "assisted",
+    "activatedAt": "2026-11-18T04:18:10.987Z"
+  }
+]

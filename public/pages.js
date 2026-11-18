@@ -674,7 +674,13 @@
         list.style.margin = "0 auto";
         ints.forEach(function (it) {
           var row = HL.el("div", "lrow");
-          row.appendChild(HL.el("div", "mono" + (it.connected ? " on" : ""), it.name.charAt(0)));
+          if (HL.BRAND_ICONS[it.id]) {
+            var ic = HL.el("div", "brand-ic" + (it.connected ? " on" : ""));
+            ic.innerHTML = HL.BRAND_ICONS[it.id];
+            row.appendChild(ic);
+          } else {
+            row.appendChild(HL.el("div", "mono" + (it.connected ? " on" : ""), it.name.charAt(0)));
+          }
           var main = HL.el("div", "lmain");
           main.appendChild(HL.el("div", "lname", it.name));
           main.appendChild(HL.el("div", "lsub", it.desc));
@@ -1043,6 +1049,24 @@
       root.appendChild(grid);
       return Promise.resolve(root);
     },
+  };
+
+  /* Real brand marks for the Integrations page — inline SVG, brand colours. */
+  HL.BRAND_ICONS = {
+    anthropic: '<svg viewBox="0 0 24 24"><path fill="#D97757" d="M13.8 4h-3.1L5 20h3.2l1.1-3h5.2l1.1 3H19L13.8 4zm-3.5 10.4 1.6-4.6 1.6 4.6h-3.2z"/><path fill="#D97757" d="M16.4 4h3.1l-3.3 9.1-1.6-4.4L16.4 4z" opacity=".55"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24"><defs><radialGradient id="igg" cx="30%" cy="107%" r="150%"><stop offset="0%" stop-color="#FDF497"/><stop offset="45%" stop-color="#FD5949"/><stop offset="60%" stop-color="#D6249F"/><stop offset="90%" stop-color="#285AEB"/></radialGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#igg)"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="17.2" cy="6.9" r="1.25" fill="#fff"/></svg>',
+    facebook: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1877F2"/><path fill="#fff" d="M15.6 12.6h-2.3V20h-3v-7.4H8.5V10h1.8V8.4c0-2 1.2-3.4 3.4-3.4h2v2.6h-1.4c-.7 0-1 .3-1 1V10h2.6l-.3 2.6z"/></svg>',
+    tiktok: '<svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="5" fill="#000"/><path fill="#25F4EE" d="M12.6 6h2v7.4a3.6 3.6 0 1 1-3.6-3.6v2.1a1.6 1.6 0 1 0 1.6 1.6V6z"/><path fill="#FE2C55" d="M13.3 6.7h2v.1c.3 1.5 1.4 2.6 2.9 2.8v2a5 5 0 0 1-2.9-1v3.5a3.6 3.6 0 1 1-3.6-3.7v2.1h-.1a1.6 1.6 0 1 0 1.7 1.6V6.7z" opacity=".9"/><path fill="#fff" d="M13 6.3h2c.3 1.6 1.4 2.7 3 2.9v2a5.2 5.2 0 0 1-3-1v3.6a3.6 3.6 0 1 1-3.7-3.6v2a1.6 1.6 0 1 0 1.7 1.6V6.3z"/></svg>',
+    linkedin: '<svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="3.5" fill="#0A66C2"/><path fill="#fff" d="M8.3 10v7H6V10h2.3zM7.1 6.6a1.35 1.35 0 1 1 0 2.7 1.35 1.35 0 0 1 0-2.7zM10 10h2.2v1c.4-.7 1.2-1.2 2.3-1.2 1.9 0 3 1.1 3 3.4V17h-2.3v-3.4c0-1.1-.5-1.7-1.4-1.7-.9 0-1.5.6-1.5 1.7V17H10v-7z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="#FF0000"/><path fill="#fff" d="M10 9l5.2 3L10 15V9z"/></svg>',
+    gcal: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3" fill="#fff"/><rect x="3" y="4" width="18" height="5" rx="3" fill="#1A73E8"/><rect x="3" y="7" width="18" height="2" fill="#1A73E8"/><text x="12" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="#1A73E8" font-family="Arial">18</text><rect x="3" y="4" width="18" height="17" rx="3" fill="none" stroke="#1A73E8" stroke-width="1.2"/></svg>',
+    gmail: '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="#fff" stroke="#E8EAED" stroke-width=".8"/><path d="M4 7l8 6 8-6" fill="none" stroke="#EA4335" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7v10" stroke="#4285F4" stroke-width="2.4" stroke-linecap="round"/><path d="M20 7v10" stroke="#34A853" stroke-width="2.4" stroke-linecap="round"/></svg>',
+    stripe: '<svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="4.5" fill="#635BFF"/><path fill="#fff" d="M11 9.7c0-.6.5-.9 1.3-.9 1 0 2.4.3 3.4.9V7c-1.1-.5-2.2-.7-3.4-.7-2.8 0-4.6 1.4-4.6 3.8 0 3.7 5 3.1 5 4.7 0 .7-.6 1-1.4 1-1.1 0-2.6-.5-3.7-1.1v2.8c1.2.5 2.5.8 3.7.8 2.8 0 4.8-1.4 4.8-3.8-.1-4-5.1-3.3-5.1-4.8z"/></svg>',
+    twilio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#F22F46"/><circle cx="9.4" cy="9.4" r="1.8" fill="#fff"/><circle cx="14.6" cy="9.4" r="1.8" fill="#fff"/><circle cx="9.4" cy="14.6" r="1.8" fill="#fff"/><circle cx="14.6" cy="14.6" r="1.8" fill="#fff"/></svg>',
+    videoai: '<svg viewBox="0 0 24 24"><defs><linearGradient id="vag" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0A84FF"/><stop offset="100%" stop-color="#FF2D92"/></linearGradient></defs><rect x="2.5" y="5" width="14" height="14" rx="3" fill="url(#vag)"/><path fill="#fff" d="M8 9.5l4.5 2.5L8 14.5v-5z"/><path d="M17 10l4.5-2.5v9L17 14" fill="url(#vag)"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#25D366"/><path fill="#fff" d="M12 5.8a6.1 6.1 0 0 0-5.2 9.3L6 18l3-0.8A6.1 6.1 0 1 0 12 5.8zm3.5 8.6c-.2.5-1 .9-1.4 1-.4 0-.8.2-2.6-.6-2.2-1-3.6-3.2-3.7-3.3-.1-.2-.9-1.2-.9-2.3 0-1.1.6-1.6.8-1.9.2-.2.5-.3.6-.3h.5c.1 0 .3 0 .5.4l.7 1.7c0 .1.1.3 0 .4l-.3.5-.4.4c-.1.1-.3.3-.1.5.1.3.6 1 1.3 1.6.9.8 1.6 1 1.9 1.2.2.1.4.1.5-.1l.8-.9c.2-.2.3-.2.5-.1l1.6.8c.2.1.4.2.4.3v.7z"/></svg>',
+    shopify: '<svg viewBox="0 0 24 24"><path fill="#95BF47" d="M17.8 6.6s0-.2-.2-.2l-1.6-.1-1.2-1.2c-.1-.1-.3-.1-.4-.1l-.6.2C13.4 4.1 12.7 3.4 11.6 3.4c-1.9 0-3 2.4-3.4 3.7l-1.5.5c-.4.1-.5.1-.5.6L4.6 19.1l10.5 1.9 4.4-1.1L17.8 6.6zm-4.6-1l-1 .3c0-.6-.1-1.3-.4-1.8.7.2 1.1.9 1.4 1.5zm-1.9.6l-2 .6c.3-1 1-2.1 1.7-2.4.3.5.3 1.2.3 1.8z"/><path fill="#5E8E3E" d="M17.6 6.4l-1.6-.1s-1.1 10.8-1.2 12l4.4-1.1-1.4-10.6c0-.1-.1-.2-.2-.2z"/><path fill="#fff" d="M12.4 9.5l-.5 1.6s-.5-.3-1.2-.2c-1 0-1 .6-1 .8 0 .8 2.2 1.1 2.2 3.1 0 1.6-1 2.6-2.3 2.6-1.6 0-2.4-1-2.4-1l.4-1.4s.8.7 1.5.7c.4 0 .6-.4.6-.6 0-1.1-1.8-1.1-1.8-2.9 0-1.5 1.1-3 3.3-3 .8 0 1.2.3 1.2.3z"/></svg>',
+    wordpress: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#21759B"/><path fill="#fff" d="M4.5 12c0-1 .2-2 .6-2.9l3.4 9.2A7.5 7.5 0 0 1 4.5 12zm12.4-.4c0 .8-.3 1.8-.7 3l-1 3.2-3.4-10c.6 0 1.1-.1 1.1-.1.5-.1.5-.8-.1-.8 0 0-1.6.1-2.6.1-.9 0-2.5-.1-2.5-.1-.5 0-.6.7 0 .8 0 0 .5 0 1 .1l1.5 4-2 6.1L4.7 7.8c.6 0 1.1-.1 1.1-.1.5-.1.5-.8-.1-.8 0 0-1.5.1-2.5.1h-.6A7.5 7.5 0 0 1 12 4.5c1.9 0 3.7.7 5 1.9h-.1c-.7 0-1.2.6-1.2 1.3 0 .6.3 1.1.7 1.7.3.5.6 1.1.6 2.2zm-4.8 1.2l2.3 6.4v.1a7.6 7.6 0 0 1-4.6.1l2.3-6.6zm6.5-4.4a7.5 7.5 0 0 1-2.8 10.1l2.3-6.6c.4-1.1.6-1.9.6-2.7v-.8z"/></svg>',
   };
 
   /* ===================== Customer Accounts (admin only) ===================== */

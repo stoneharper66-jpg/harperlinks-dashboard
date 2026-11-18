@@ -332,6 +332,12 @@ a{color:inherit;text-decoration:none}
 .cc-sug svg{width:18px;height:18px;flex-shrink:0;stroke:var(--dim);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .cc-sug:hover svg{stroke:var(--accent)}
 
+/* brand marks on the Integrations page */
+.brand-ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.04);border:1px solid var(--border)}
+.brand-ic svg{width:24px;height:24px;display:block}
+.brand-ic.on{border-color:rgba(22,163,74,.45);box-shadow:0 0 14px rgba(22,163,74,.22)}
+
 /* who's signed in */
 .user-chip{font-size:12.5px;color:var(--muted);padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.03);white-space:nowrap}
 button.back-link{background:none;border:none;cursor:pointer;font:inherit}

@@ -1,0 +1,106 @@
+[
+  {
+    "at": "2026-11-17T06:33:22.882Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:32:25.022Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:32:32.322Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:46:21.382Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:46:39.299Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:47:29.631Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:50:07.097Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:50:28.690Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:51:25.562Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T01:51:48.893Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T04:07:18.020Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T04:07:52.791Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-18T04:21:11.135Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  }
+]

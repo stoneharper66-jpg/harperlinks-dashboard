@@ -582,37 +582,39 @@ app.delete("/api/team/:id", (req, res) => {
 // ---- integrations (honest status only) ------------------------------------------------------
 
 app.get("/api/integrations", async (_req, res) => {
-  // Having a token in .env is not the same as the token working. Ask GHL, so a
-  // typo'd or wrong-scope token reads "not connected" with the reason, rather
-  // than showing a green tick that lies right up until a post fails to send.
-  const ghlStatus = await ghl.health();
+  // White-label rule: customers see the platforms they care about, never the
+  // plumbing. GoHighLevel does the actual publishing, but it has no row here —
+  // instead the Instagram/Facebook/TikTok/LinkedIn/YouTube rows show the REAL
+  // connection state of this account's (hidden) publishing engine. The admin
+  // manages that engine from Customer Accounts -> GoHighLevel.
+  const engineStatus = await ghl.health();
+  const linked = new Set(
+    (engineStatus.connected ? engineStatus.accounts || [] : []).map((a) => String(a.platform || "").toLowerCase())
+  );
+  const social = (ourName, ...ghlNames) => {
+    const on = ghlNames.some((n) => linked.has(n));
+    return {
+      connected: on,
+      detail: on ? "Connected — publishing is live." : undefined,
+      how: "The HarperLinks team connects this for you during your setup — reach out on WhatsApp or email and we'll link it to your account.",
+    };
+  };
 
   res.json([
-    { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Add ANTHROPIC_API_KEY to .env and restart." },
-    {
-      id: "gohighlevel",
-      name: "GoHighLevel",
-      desc: "Publishes to Instagram, Facebook, TikTok, LinkedIn & YouTube.",
-      connected: ghlStatus.connected,
-      // once it's live, say what it can actually post to
-      detail: ghlStatus.connected
-        ? (ghlStatus.accounts || []).length
-          ? `Connected · ${ghlStatus.accounts.map((a) => a.platform).join(", ")}`
-          : "Connected, but no social accounts linked in GHL's Social Planner yet."
-        : ghlStatus.reason,
-      how: "Connect your socials in GHL Social Planner, then add GHL_TOKEN (scope socialplanner/post.write) and GHL_LOCATION_ID to .env.",
-    },
-    { id: "instagram", name: "Instagram", desc: "Live publishing & DMs.", connected: false, how: "Requires a Meta developer app + Instagram Graph API approval." },
-    { id: "facebook", name: "Facebook", desc: "Page posts & Messenger.", connected: false, how: "Requires a Meta developer app + Pages API access." },
-    { id: "tiktok", name: "TikTok", desc: "Video publishing.", connected: false, how: "Requires TikTok Content Posting API approval." },
-    { id: "gcal", name: "Google Calendar", desc: "Two-way appointment sync.", connected: false, how: "Requires a Google Cloud OAuth app." },
-    { id: "gmail", name: "Gmail", desc: "Email sending & sequences.", connected: false, how: "Requires a Google Cloud OAuth app." },
-    { id: "stripe", name: "Stripe", desc: "Subscriptions & billing.", connected: false, how: "Requires a Stripe account + API keys." },
-    { id: "twilio", name: "Twilio", desc: "AI phone calls & SMS.", connected: false, how: "Requires a Twilio account, number and voice webhooks." },
-    { id: "videoai", name: "Video AI (Sora / Veo)", desc: "Turns the bot's video scripts into rendered footage.", connected: false, how: "Requires an OpenAI Sora or Google Veo API key. Scripts & shot lists already work today." },
-    { id: "whatsapp", name: "WhatsApp Business", desc: "Customer messaging.", connected: false, how: "Requires Meta WhatsApp Business API access." },
-    { id: "shopify", name: "Shopify", desc: "Store data & customers.", connected: false, how: "Requires a Shopify app + store token." },
-    { id: "wordpress", name: "WordPress", desc: "Push website edits live.", connected: false, how: "Requires your WP site URL + application password." },
+    { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Connected and managed by the HarperLinks team." },
+    Object.assign({ id: "instagram", name: "Instagram", desc: "Live publishing & DMs." }, social("instagram", "instagram")),
+    Object.assign({ id: "facebook", name: "Facebook", desc: "Page posts & Messenger." }, social("facebook", "facebook")),
+    Object.assign({ id: "tiktok", name: "TikTok", desc: "Video publishing." }, social("tiktok", "tiktok", "tiktok-business")),
+    Object.assign({ id: "linkedin", name: "LinkedIn", desc: "Company page publishing." }, social("linkedin", "linkedin")),
+    Object.assign({ id: "youtube", name: "YouTube", desc: "Video publishing." }, social("youtube", "youtube")),
+    { id: "gcal", name: "Google Calendar", desc: "Two-way appointment sync.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    { id: "gmail", name: "Gmail", desc: "Email sending & sequences.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    { id: "stripe", name: "Stripe", desc: "Subscriptions & billing.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    { id: "twilio", name: "Twilio", desc: "AI phone calls & SMS.", connected: false, how: "Coming soon — powers Harper, your AI receptionist." },
+    { id: "videoai", name: "Video AI", desc: "Turns the bot's video scripts into rendered footage.", connected: false, how: "Coming soon — scripts & shot lists already work today." },
+    { id: "whatsapp", name: "WhatsApp Business", desc: "Customer messaging.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    { id: "shopify", name: "Shopify", desc: "Store data & customers.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    { id: "wordpress", name: "WordPress", desc: "Push website edits live.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
   ]);
 });
 

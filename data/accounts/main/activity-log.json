@@ -1,0 +1,86 @@
+[
+  {
+    "at": "2026-11-18T01:50:04.950Z",
+    "type": "task",
+    "message": "Task added: Call Terry (due Thu, 19 Nov, 9:00 am)",
+    "refId": "task_mwlgrser1"
+  },
+  {
+    "at": "2026-11-18T04:07:40.276Z",
+    "type": "ingested",
+    "message": "Learned Larpify from https://larpifyy.com/",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:07:50.328Z",
+    "type": "created",
+    "message": "Drafted a tiktok post",
+    "refId": "post_mwlloy0n1"
+  },
+  {
+    "at": "2026-11-18T04:17:51.841Z",
+    "type": "auth",
+    "message": "Admin account created for harperlinksteam@gmail.com",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:18:07.057Z",
+    "type": "employee",
+    "message": "Riley (Customer Support Agent) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:18:08.820Z",
+    "type": "employee",
+    "message": "Harper (AI Receptionist) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:18:09.705Z",
+    "type": "employee",
+    "message": "Flynn (Sales Agent) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:18:10.337Z",
+    "type": "employee",
+    "message": "Indi (Website Builder) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:18:10.987Z",
+    "type": "employee",
+    "message": "Darcy (Business Manager) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-18T04:21:02.749Z",
+    "type": "scheduled",
+    "message": "Scheduled instagram post for Mon, 23 Nov, 9:00 am",
+    "refId": "post_mwlm5xga2"
+  },
+  {
+    "at": "2026-11-18T04:21:02.751Z",
+    "type": "scheduled",
+    "message": "Scheduled tiktok post for Tue, 24 Nov, 11:00 am",
+    "refId": "post_mwlm5xgf3"
+  },
+  {
+    "at": "2026-11-18T04:21:02.753Z",
+    "type": "scheduled",
+    "message": "Scheduled instagram post for Thu, 19 Nov, 12:00 pm",
+    "refId": "post_mwlm5xgg4"
+  },
+  {
+    "at": "2026-11-18T04:21:02.754Z",
+    "type": "scheduled",
+    "message": "Scheduled tiktok post for Fri, 20 Nov, 10:00 am",
+    "refId": "post_mwlm5xgh5"
+  },
+  {
+    "at": "2026-11-18T04:21:06.956Z",
+    "type": "scheduled",
+    "message": "Scheduled facebook post for Wed, 25 Nov, 10:00 am",
+    "refId": "post_mwlm60p76"
+  }
+]
