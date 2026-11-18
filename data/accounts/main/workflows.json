@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "id": "wf_mwltsavn1",
+    "name": "lead generation",
+    "trigger": "lead.won",
+    "actions": [
+      {
+        "type": "create_followup",
+        "note": "hello"
+      }
+    ],
+    "enabled": true,
+    "runs": [
+      {
+        "at": "2026-11-18T07:54:31.570Z",
+        "event": "lead.won",
+        "results": [
+          {
+            "action": "create_followup",
+            "ok": false,
+            "error": "no lead in this event"
+          }
+        ]
+      },
+      {
+        "at": "2026-11-18T07:54:33.480Z",
+        "event": "lead.won",
+        "results": [
+          {
+            "action": "create_followup",
+            "ok": false,
+            "error": "no lead in this event"
+          }
+        ]
+      },
+      {
+        "at": "2026-11-18T07:54:34.365Z",
+        "event": "lead.won",
+        "results": [
+          {
+            "action": "create_followup",
+            "ok": false,
+            "error": "no lead in this event"
+          }
+        ]
+      }
+    ],
+    "createdAt": "2026-11-18T07:54:23.891Z"
+  }
+]

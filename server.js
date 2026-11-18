@@ -15,6 +15,7 @@ const events = require("./src/events");
 const { ingestWebsite } = require("./src/ingest");
 const budget = require("./src/budget");
 const ghl = require("./src/ghl");
+const website = require("./src/website");
 const { resolveWhen, formatWhen } = require("./src/tools");
 
 const app = express();
@@ -105,6 +106,23 @@ app.post("/api/public/ask", async (req, res) => {
     console.error("site agent error:", e.message);
     res.status(500).json({ error: "The assistant hit a snag — try again in a moment." });
   }
+});
+
+// ---------------- the customer's built website, served publicly ----------------
+// A site the AI built for an account is a real public page: /site/<accountId>.
+// It's their content, served as-is. No session needed — that's the point.
+app.get("/site/:accountId", (req, res) => {
+  const id = req.params.accountId;
+  if (!tenant.isValidId(id)) return res.status(404).send("Not found");
+  tenant.run(id, () => {
+    const w = website.get();
+    if (w.mode !== "built" || !w.html) return res.status(404).send("No site here yet.");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // the page is authored by the AI for this account; stop it pulling in
+    // anything remote and stop it being framed by other sites
+    res.setHeader("Content-Security-Policy", "default-src 'self' data:; style-src 'unsafe-inline' 'self'; img-src 'self' data:; script-src 'none'; frame-ancestors 'self'");
+    res.send(w.html);
+  });
 });
 
 // ============================== the sign-in gate =============================
@@ -619,6 +637,28 @@ app.get("/api/integrations", async (_req, res) => {
     { id: "shopify", name: "Shopify", desc: "Store data & customers.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
     { id: "wordpress", name: "WordPress", desc: "Push website edits live.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
   ]);
+});
+
+// ---- website ---------------------------------------------------------------
+app.get("/api/website", (req, res) => {
+  const w = website.get();
+  res.json(Object.assign({}, w, { publicPath: w.mode === "built" ? "/site/" + req.user.accountId : null }));
+});
+
+app.post("/api/website/link", (req, res) => {
+  try {
+    res.json(website.setExternal((req.body || {}).url));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/website/restore", (_req, res) => {
+  try {
+    res.json(website.restorePrevious());
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ---- activity / stats / report ---------------------------------------------------------------

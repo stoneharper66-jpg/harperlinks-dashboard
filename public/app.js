@@ -411,5 +411,6 @@
     HL.refreshHealth();
     setInterval(HL.refreshHealth, 30000);
     HL.navigate();
+    if (HL.mountAssistant) HL.mountAssistant();
   }
 })();

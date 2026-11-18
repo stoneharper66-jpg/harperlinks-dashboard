@@ -132,60 +132,86 @@
     render: function () {
       return HL.api("/api/employees").then(function (emps) {
         var root = HL.el("div");
-        root.appendChild(HL.el("p", "sec-intro", "Switch them on. Pick how much freedom they get."));
+        var on = emps.filter(function (e) { return e.enabled; }).length;
+        root.appendChild(HL.el("p", "sec-intro", on + " of " + emps.length + " on duty. Switch them on and choose how much freedom each one gets."));
 
-        var list = HL.el("div", "rowlist");
-        list.style.maxWidth = "760px";
-        list.style.margin = "0 auto";
-        emps.forEach(function (e) {
-          var row = HL.el("div", "lrow");
-          var mono = HL.el("div", "mono" + (e.enabled ? " on" : ""), e.name.charAt(0));
-          row.appendChild(mono);
-          var main = HL.el("div", "lmain");
-          var nm = HL.el("div", "lname", e.name);
-          nm.appendChild(HL.el("span", null, e.role));
-          main.appendChild(nm);
-          var sub = HL.el("div", "lsub" + (e.needs && e.needs.length && !e.ready ? " needs" : ""),
-            e.needs && e.needs.length && !e.ready ? "Needs " + e.needs[0] : e.description);
-          main.appendChild(sub);
-          row.appendChild(main);
-          var ctl = HL.el("div", "lctl");
-          var chatB = HL.el("button", "btn ghost sm", "Chat");
+        var grid = HL.el("div", "emp-grid");
+        emps.forEach(function (e, i) {
+          var card = HL.el("div", "emp-card" + (e.enabled ? " live" : "") + (e.ready ? "" : " pending"));
+          card.style.animationDelay = (0.05 * i) + "s";
+
+          var top = HL.el("div", "emp-top");
+          var av = HL.el("div", "emp-av" + (e.enabled ? " on" : ""), e.name.charAt(0));
+          top.appendChild(av);
+          var who = HL.el("div", "emp-who");
+          who.appendChild(HL.el("div", "emp-name", e.name));
+          who.appendChild(HL.el("div", "emp-role", e.role));
+          top.appendChild(who);
+          var pulse = HL.el("span", "emp-state " + (e.enabled ? "ok" : e.ready ? "off" : "wait"),
+            e.enabled ? "On duty" : e.ready ? "Paused" : "Setup needed");
+          top.appendChild(pulse);
+          card.appendChild(top);
+
+          card.appendChild(HL.el("p", "emp-desc", e.description));
+
+          var caps = HL.el("div", "emp-caps");
+          (e.capabilities || []).slice(0, 4).forEach(function (c) {
+            caps.appendChild(HL.el("span", "emp-cap", c));
+          });
+          card.appendChild(caps);
+
+          if (!e.ready && (e.needs || []).length) {
+            var need = HL.el("div", "emp-need");
+            need.textContent = "Needs " + e.needs[0];
+            card.appendChild(need);
+          }
+
+          var foot = HL.el("div", "emp-foot");
+          var modeSel = HL.select([
+            { value: "assisted", label: "Assisted — ask me first" },
+            { value: "supervised", label: "Supervised — tell me after" },
+            { value: "autonomous", label: "Autonomous — just do it" },
+          ], e.mode);
+          modeSel.className = "select emp-mode";
+          modeSel.addEventListener("change", function () {
+            HL.post("/api/employees/" + e.id, { mode: modeSel.value }, "PATCH")
+              .then(function () { HL.toast(e.name + " → " + modeSel.value); })
+              .catch(function (err) { HL.toast(err.message, true); });
+          });
+          foot.appendChild(modeSel);
+
+          var sw = HL.switchEl(e.enabled, function (isOn) {
+            HL.post("/api/employees/" + e.id, { enabled: isOn }, "PATCH")
+              .then(function () {
+                card.classList.toggle("live", isOn);
+                av.classList.toggle("on", isOn);
+                pulse.className = "emp-state " + (isOn ? "ok" : e.ready ? "off" : "wait");
+                pulse.textContent = isOn ? "On duty" : e.ready ? "Paused" : "Setup needed";
+                HL.toast(e.name + (isOn ? " is on duty" : " paused"));
+              })
+              .catch(function (err) { HL.toast(err.message, true); });
+          });
+          foot.appendChild(sw);
+          card.appendChild(foot);
+
+          var acts = HL.el("div", "emp-acts");
+          var chatB = HL.el("button", "btn ghost sm", "Talk to " + e.name);
           chatB.addEventListener("click", function () { location.hash = "#/overview?emp=" + e.id; });
-          ctl.appendChild(chatB);
+          acts.appendChild(chatB);
           var WORKSPACES = { social: "social", support: "inbox", receptionist: "phone", sales: "crm", web: "website", manager: "analytics" };
           var wsB = HL.el("button", "btn ghost sm", "Workspace");
           wsB.addEventListener("click", function () { location.hash = "#/" + (WORKSPACES[e.id] || "overview"); });
-          ctl.appendChild(wsB);
-          var modeSel = HL.select([
-            { value: "assisted", label: "Assisted" },
-            { value: "supervised", label: "Supervised" },
-            { value: "autonomous", label: "Autonomous" },
-          ], e.mode);
-          modeSel.addEventListener("change", function () {
-            HL.post("/api/employees/" + e.id, { mode: modeSel.value }, "PATCH")
-              .then(function () { HL.toast(e.name + " set to " + modeSel.value); })
-              .catch(function (err) { HL.toast(err.message, true); });
-          });
-          ctl.appendChild(modeSel);
-          ctl.appendChild(HL.switchEl(e.enabled, function (on) {
-            HL.post("/api/employees/" + e.id, { enabled: on }, "PATCH")
-              .then(function () {
-                mono.classList.toggle("on", on);
-                HL.toast(e.name + (on ? " activated" : " paused"));
-              })
-              .catch(function (err) { HL.toast(err.message, true); });
-          }));
-          row.appendChild(ctl);
-          list.appendChild(row);
+          acts.appendChild(wsB);
+          card.appendChild(acts);
+
+          grid.appendChild(card);
         });
-        root.appendChild(list);
+        root.appendChild(grid);
         return root;
       });
     },
   };
 
-  /* ================= AUTOMATIONS ================= */
   HL.pages.automations = {
     title: "Automations",
     render: function () {
@@ -559,66 +585,139 @@
   HL.pages.website = {
     title: "Website Manager",
     render: function () {
-      return HL.api("/api/profile").then(function (profile) {
-        var root = HL.el("div");
-        var grid = HL.el("div", "grid cols-2");
+      return Promise.all([HL.api("/api/website"), HL.api("/api/profile")]).then(function (res) {
+        var site = res[0], profile = res[1];
+        var root = HL.el("div", "wsite");
 
-        var info = HL.panel("Your website", profile.configured ? "Learned " + HL.fmtDay(profile.ingestedAt) : "Not ingested yet");
-        var body = HL.el("div", "panel-body");
+        /* ---- the live preview, front and centre ---- */
+        var stage = HL.el("div", "wstage");
+        var bar = HL.el("div", "wbar");
+        var dots = HL.el("div", "wdots");
+        dots.innerHTML = "<i></i><i></i><i></i>";
+        bar.appendChild(dots);
+        var addr = HL.el("div", "waddr");
+        bar.appendChild(addr);
+        var barActions = HL.el("div", "wbar-act");
+        bar.appendChild(barActions);
+        stage.appendChild(bar);
+
+        var viewport = HL.el("div", "wview");
+        stage.appendChild(viewport);
+
+        function openBtn(href, label) {
+          var a = HL.el("a", "btn ghost sm", label || "Open ↗");
+          a.href = href; a.target = "_blank"; a.rel = "noopener";
+          return a;
+        }
+
+        if (site.mode === "built" && site.publicPath) {
+          addr.textContent = location.origin + site.publicPath;
+          var fr = document.createElement("iframe");
+          fr.className = "wframe";
+          fr.src = site.publicPath + "?t=" + Date.now();
+          fr.title = "Live preview of your website";
+          viewport.appendChild(fr);
+          barActions.appendChild(openBtn(site.publicPath));
+          if (site.versions && site.versions.length) {
+            var undo = HL.el("button", "btn ghost sm", "Undo last change");
+            undo.addEventListener("click", function () {
+              HL.post("/api/website/restore", {})
+                .then(function () { HL.toast("Rolled back to the previous version"); HL.navigate(); })
+                .catch(function (e) { HL.toast(e.message, true); });
+            });
+            barActions.appendChild(undo);
+          }
+        } else if (site.mode === "external" && site.externalUrl) {
+          addr.textContent = site.externalUrl;
+          var ef = document.createElement("iframe");
+          ef.className = "wframe";
+          ef.src = site.externalUrl;
+          ef.title = "Preview of your website";
+          viewport.appendChild(ef);
+          // Plenty of sites refuse to be framed. Say so plainly rather than
+          // leaving a mysterious white rectangle.
+          var warn = HL.el("div", "wblocked");
+          warn.innerHTML = "If this stays blank, your website blocks being shown inside other pages — that's a setting on their end, not a fault here. <br/>Use <b>Open ↗</b> to view it, or ask your AI team to build you a HarperLinks page.";
+          viewport.appendChild(warn);
+          barActions.appendChild(openBtn(site.externalUrl));
+        } else {
+          addr.textContent = "No website yet";
+          var empty = HL.el("div", "wempty");
+          empty.innerHTML = "<div class=\'we-ic\'>◧</div>" +
+            "<h3>No website yet</h3>" +
+            "<p>Your AI team can write you a complete one-page site — hero, services, why-choose-us and contact — in about a minute. Or link the site you already have.</p>";
+          var mk = HL.el("button", "btn", "Build my website with AI");
+          mk.addEventListener("click", function () {
+            location.hash = "#/overview";
+            setTimeout(function () {
+              var inp = document.querySelector(".cc-compose input");
+              if (inp) {
+                var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+                d.set.call(inp, "Build me a website for my business");
+                inp.dispatchEvent(new Event("input", { bubbles: true }));
+                inp.focus();
+              }
+            }, 400);
+          });
+          empty.appendChild(mk);
+          viewport.appendChild(empty);
+        }
+        root.appendChild(stage);
+
+        /* ---- link an existing site ---- */
+        var tools = HL.el("div", "wtools");
+
+        var linkCard = HL.panel("Already have a website?", "We'll preview it here and learn your voice from it");
+        var lb = HL.el("div", "panel-body");
+        var lrow = HL.el("div", "ingest-row");
+        var lurl = HL.input(site.externalUrl || "https://yourbusiness.com");
+        var lgo = HL.el("button", "ingest-btn", "Link & learn");
+        lgo.addEventListener("click", function () {
+          var v = lurl.value.trim();
+          if (!v) return HL.toast("Paste a website address first.", true);
+          lgo.disabled = true; lgo.textContent = "Learning…";
+          HL.post("/api/website/link", { url: v })
+            .then(function () { return HL.post("/api/ingest", { url: v }); })
+            .then(function (out) { HL.toast("Linked and learned " + out.profile.name + " ✓"); HL.navigate(); })
+            .catch(function (e) { HL.toast(e.message, true); lgo.disabled = false; lgo.textContent = "Link & learn"; });
+        });
+        lrow.appendChild(lurl); lrow.appendChild(lgo);
+        lb.appendChild(lrow);
+        linkCard.appendChild(lb);
+        tools.appendChild(linkCard);
+
+        /* ---- what the AI knows ---- */
+        var know = HL.panel("What your AI team knows", profile.configured ? "Learned " + HL.fmtDay(profile.ingestedAt) : "Nothing yet");
+        var kb = HL.el("div", "panel-body");
         if (profile.configured) {
-          [["Business", profile.name + " · " + profile.businessType], ["Source", profile.sourceUrl], ["Tagline", profile.tagline || "—"], ["Audience", profile.audience || "—"], ["Voice", profile.tone || "—"]].forEach(function (f) {
+          [["Business", profile.name + " · " + profile.businessType],
+           ["Tagline", profile.tagline || "—"],
+           ["Audience", profile.audience || "—"],
+           ["Voice", profile.tone || "—"]].forEach(function (f) {
             var r = HL.el("div", "pf-row");
             r.appendChild(HL.el("span", "pf-label", f[0]));
             r.appendChild(HL.el("span", "pf-val", f[1]));
-            body.appendChild(r);
+            kb.appendChild(r);
           });
           if ((profile.services || []).length) {
             var r2 = HL.el("div", "pf-row");
-            r2.appendChild(HL.el("span", "pf-label", "Services detected"));
+            r2.appendChild(HL.el("span", "pf-label", "Services"));
             var tags = HL.el("div", "pf-tags");
             profile.services.forEach(function (s) { tags.appendChild(HL.el("span", "pf-tag", s)); });
             r2.appendChild(tags);
-            body.appendChild(r2);
+            kb.appendChild(r2);
           }
         } else {
-          body.appendChild(HL.el("p", "sec-intro", "Paste your website — your AI team learns it and works in your voice."));
+          kb.appendChild(HL.el("p", "sec-intro", "Link your site above, or ask your AI team to build one — either way they'll write in your voice afterwards."));
         }
-        var row = HL.el("div", "ingest-row");
-        var url = HL.input(profile.configured ? "Re-ingest (e.g. after site changes)" : "https://yourbusiness.com");
-        var go = HL.el("button", "ingest-btn", "Ingest");
-        go.addEventListener("click", function () {
-          if (!url.value.trim()) return HL.toast("Paste a website address first.", true);
-          go.disabled = true; go.textContent = "Learning…";
-          HL.post("/api/ingest", { url: url.value.trim() })
-            .then(function (out) { HL.toast("Learned " + out.profile.name + " ✓"); HL.navigate(); })
-            .catch(function (e) { HL.toast(e.message, true); go.disabled = false; go.textContent = "Ingest"; });
-        });
-        row.appendChild(url); row.appendChild(go);
-        body.appendChild(row);
-        info.appendChild(body);
-        grid.appendChild(info);
+        know.appendChild(kb);
+        tools.appendChild(know);
 
-        var right = HL.el("div");
-        right.style.cssText = "display:flex;flex-direction:column;gap:16px";
-        if (profile.configured) {
-          var prev = HL.panel("Preview", "");
-          var pb = HL.el("div", "panel-body");
-          var frame = document.createElement("iframe");
-          frame.src = profile.sourceUrl;
-          frame.style.cssText = "width:100%;height:260px;border:1px solid var(--border);border-radius:12px;background:#fff";
-          frame.loading = "lazy";
-          pb.appendChild(frame);
-          pb.appendChild(HL.el("p", "sec-intro", "Live view of your current site. Some sites block embedding — open it directly if the preview is blank."));
-          prev.appendChild(pb);
-          right.appendChild(prev);
-        }
-        var edits = HL.panel("AI website editing", "");
-        var eb = HL.el("div", "panel-body");
-        eb.appendChild(HL.setupNote("<b>Live edits need CMS access</b> (WordPress). Until then, ask the chat to draft page copy and paste it in."));
-        edits.appendChild(eb);
-        right.appendChild(edits);
-        grid.appendChild(right);
-        root.appendChild(grid);
+        root.appendChild(tools);
+
+        var hint = HL.el("p", "sec-intro", "Tip: ask your AI team things like \u201cmake the hero darker\u201d or \u201cadd a section about our opening hours\u201d \u2014 it edits this page and the preview updates.");
+        hint.style.marginTop = "18px";
+        root.appendChild(hint);
         return root;
       });
     },

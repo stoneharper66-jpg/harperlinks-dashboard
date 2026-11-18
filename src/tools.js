@@ -189,6 +189,93 @@ const toolSchemas = [
       required: ["postId"],
     },
   },
+
+  // ---- building things: automations the owner can watch run ----
+  {
+    name: "list_automations",
+    description:
+      "List this business's automation workflows and what each one does, including whether it is switched on. Use before creating one so you don't duplicate an existing workflow, or when the user asks what's automated.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "create_automation",
+    description:
+      "Build a new automation: when TRIGGER happens, do these ACTIONS. Use the exact trigger and action ids from list_automation_options. Create it, then call test_automation so the user can see it actually run.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short name, e.g. 'Welcome new leads'" },
+        trigger: { type: "string", description: "Trigger id, e.g. lead.created" },
+        actions: {
+          type: "array",
+          description: "The steps to run, in order",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", description: "Action id, e.g. create_followup" },
+              note: { type: "string", description: "Optional note or message for this step" },
+            },
+            required: ["type"],
+          },
+        },
+      },
+      required: ["name", "trigger", "actions"],
+    },
+  },
+  {
+    name: "list_automation_options",
+    description: "List the exact trigger ids and action ids available for create_automation, and which actions run for real versus needing an integration.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "test_automation",
+    description:
+      "Fire a workflow once with sample data so the user can see what it does. Reports the real result of every step, including steps that were skipped because an integration isn't connected.",
+    input_schema: {
+      type: "object",
+      properties: { workflowId: { type: "string", description: "The workflow id" } },
+      required: ["workflowId"],
+    },
+  },
+
+  // ---- building things: the customer's website ----
+  {
+    name: "get_website",
+    description: "Check the state of the business's website — whether it's an external site we only link to, a site you built (which you can edit), or nothing yet.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "build_website",
+    description:
+      "Write a complete one-page website for this business and publish it. YOU write the full HTML yourself: a single self-contained file with inline <style>, no external files, no frameworks, no placeholder lorem ipsum. Use the real business profile and knowledge base. Make it genuinely attractive — a hero, what they do, why choose them, and contact details. This replaces the current built site (the previous version is kept and can be restored).",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Page title" },
+        html: { type: "string", description: "The complete HTML document, inline CSS included" },
+        note: { type: "string", description: "One line on what this version is, e.g. 'first draft' or 'warmer colours'" },
+      },
+      required: ["title", "html"],
+    },
+  },
+  {
+    name: "edit_website",
+    description:
+      "Change the site you built. Pass the FULL new HTML (read it first with get_website_html, make your changes, send the whole document back). Only works on a site HarperLinks built — we can't edit someone else's hosted site without their CMS access.",
+    input_schema: {
+      type: "object",
+      properties: {
+        html: { type: "string", description: "The complete updated HTML document" },
+        note: { type: "string", description: "What you changed, in one line" },
+      },
+      required: ["html", "note"],
+    },
+  },
+  {
+    name: "get_website_html",
+    description: "Read the current HTML of the site you built, so you can edit it precisely.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 // ---- handlers ---------------------------------------------------------------
@@ -211,6 +298,145 @@ function makeHandlers(base = dt.now()) {
       const p = store.getProfile();
       if (!p.configured) return { ok: true, content: "No business profile yet — ask the user for their website URL and call ingest_website." };
       return { ok: true, content: JSON.stringify(p) };
+    },
+
+    // ---- automations ----
+    list_automation_options() {
+      const events = require("./events");
+      return {
+        ok: true,
+        content:
+          "TRIGGERS: " + events.TRIGGERS.map((t) => `${t.id} (${t.label})`).join("; ") +
+          "\nACTIONS: " + events.ACTIONS.map((a) => `${a.id} (${a.label})${a.local ? " [runs for real]" : ` [needs ${a.needs}]`}`).join("; "),
+      };
+    },
+
+    list_automations() {
+      const wfs = store.getCol("workflows");
+      if (!wfs.length) return { ok: true, content: "No automations yet." };
+      return {
+        ok: true,
+        content: wfs.map((w) =>
+          `[${w.id}] "${w.name}" — when ${w.trigger} → ${w.actions.map((a) => a.type).join(" → ")} · ${w.enabled ? "ON" : "OFF"} · ${(w.runs || []).length} run(s)`
+        ).join("\n"),
+      };
+    },
+
+    create_automation(input) {
+      const events = require("./events");
+      const validTrigger = events.TRIGGERS.some((t) => t.id === input.trigger);
+      if (!validTrigger) {
+        return { ok: false, content: `"${input.trigger}" isn't a real trigger. Call list_automation_options first.` };
+      }
+      const actions = (input.actions || []).filter((a) => a && a.type);
+      const bad = actions.find((a) => !events.ACTIONS.some((x) => x.id === a.type));
+      if (!actions.length) return { ok: false, content: "A workflow needs at least one action." };
+      if (bad) return { ok: false, content: `"${bad.type}" isn't a real action. Call list_automation_options first.` };
+
+      const wfs = store.getCol("workflows");
+      const record = {
+        id: store.newId("wf"),
+        name: String(input.name).trim().slice(0, 80),
+        trigger: input.trigger,
+        actions: actions.map((a) => ({ type: a.type, note: a.note || undefined })),
+        enabled: true,
+        runs: [],
+        createdAt: new Date().toISOString(),
+      };
+      wfs.push(record);
+      store.saveCol("workflows", wfs);
+      store.logActivity("automation", `Workflow created by your AI team: "${record.name}"`);
+      const needs = actions
+        .map((a) => events.ACTIONS.find((x) => x.id === a.type))
+        .filter((a) => a && !a.local)
+        .map((a) => a.needs);
+      return {
+        ok: true,
+        content: `Created [${record.id}] "${record.name}" and switched it on.` +
+          (needs.length ? ` Heads up: ${[...new Set(needs)].join(" and ")} isn't connected, so those steps will skip with a logged reason until it is.` : ""),
+        action: { type: "automation", record },
+      };
+    },
+
+    test_automation(input) {
+      const events = require("./events");
+      const wfs = store.getCol("workflows");
+      const wf = wfs.find((w) => w.id === input.workflowId);
+      if (!wf) return { ok: false, content: "No workflow with that id — call list_automations." };
+
+      const before = (store.getCol("workflows").find((w) => w.id === wf.id) || {}).runs || [];
+      const leads = store.getCol("leads");
+      const payload = { leadId: leads.length ? leads[leads.length - 1].id : null, summary: "test run from your AI team" };
+
+      const wasEnabled = wf.enabled;
+      wf.enabled = true;
+      store.saveCol("workflows", wfs);
+      events.emit(wf.trigger, payload);
+
+      const after = store.getCol("workflows");
+      const updated = after.find((w) => w.id === wf.id);
+      updated.enabled = wasEnabled;
+      store.saveCol("workflows", after);
+
+      const runs = updated.runs || [];
+      const fresh = runs.slice(before.length);
+      if (!fresh.length) return { ok: true, content: "Fired it, but nothing was recorded — the trigger may need real data (e.g. an actual lead) to do anything." };
+      const last = fresh[fresh.length - 1];
+      // events.js records each step as { action, ok, error }
+      const steps = (last.results || []).map((st) => `${st.action}: ${st.ok ? "ran" : "did not run"}${st.error ? ` — ${st.error}` : ""}`);
+      return {
+        ok: true,
+        content: `Test fired "${updated.name}". ${steps.length ? steps.join(" | ") : "No steps recorded."}`,
+        action: { type: "automation", record: updated },
+      };
+    },
+
+    // ---- website ----
+    get_website() {
+      const website = require("./website");
+      const w = website.get();
+      if (w.mode === "external") return { ok: true, content: `They already have a site at ${w.externalUrl}. We can show it in a preview but can't edit it without their CMS access — offer to build a new HarperLinks page instead, or to write copy they can paste in.` };
+      if (w.mode === "built") return { ok: true, content: `A HarperLinks-built site exists ("${w.title}"), last updated ${w.updatedAt}. You can edit it with edit_website. ${w.versions.length} earlier version(s) saved.` };
+      return { ok: true, content: "No website yet. Offer to build one — you write the whole page." };
+    },
+
+    get_website_html() {
+      const website = require("./website");
+      const w = website.get();
+      if (w.mode !== "built" || !w.html) return { ok: false, content: "There's no HarperLinks-built site to read yet." };
+      return { ok: true, content: w.html };
+    },
+
+    build_website(input) {
+      const website = require("./website");
+      try {
+        const out = website.saveHtml(input.html, { title: input.title, note: input.note || "first draft" });
+        return {
+          ok: true,
+          content: `Published the site "${input.title}". It's live on the Website page — the preview updates straight away.`,
+          action: { type: "website", record: { title: out.title, updatedAt: out.updatedAt, note: input.note || "first draft" } },
+        };
+      } catch (e) {
+        return { ok: false, content: `Couldn't publish that page — ${e.message}` };
+      }
+    },
+
+    edit_website(input) {
+      const website = require("./website");
+      const current = website.get();
+      if (current.mode !== "built") {
+        return { ok: false, content: "There's no HarperLinks-built site to edit. Use build_website to create one, or tell the user we can't edit an externally hosted site without CMS access." };
+      }
+      try {
+        const out = website.saveHtml(input.html, { title: current.title, note: input.note });
+        return {
+          ok: true,
+          content: `Updated the site — ${input.note}. The previous version is saved if they want it back.`,
+          action: { type: "website", record: { title: out.title, updatedAt: out.updatedAt, note: input.note } },
+        };
+      } catch (e) {
+        return { ok: false, content: `Couldn't save that edit — ${e.message}` };
+      }
     },
 
     create_post(input) {
