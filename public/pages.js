@@ -39,6 +39,10 @@
         logo.setAttribute("aria-hidden", "true");
         root.appendChild(logo);
 
+        var hr = new Date().getHours();
+        var kick = hr < 12 ? "Good morning" : hr < 17 ? "Good arvo" : "Good evening";
+        root.appendChild(HL.el("div", "cc-kicker", kick + " — your AI team is on."));
+
         var title = HL.el("h2", "cc-title");
         if (empDef) {
           title.innerHTML = "Talk to <span class=\"ttl-name\">" + HL.esc(empDef.name) + "</span>.";
