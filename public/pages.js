@@ -39,10 +39,14 @@
         logo.setAttribute("aria-hidden", "true");
         root.appendChild(logo);
 
-        var title = HL.el("h2", "cc-title",
-          empDef ? "Talk to " + empDef.name + "."
-          : profile.configured ? "What should we get done, " + profile.name.split(" ")[0] + "?"
-          : "Where should we start?");
+        var title = HL.el("h2", "cc-title");
+        if (empDef) {
+          title.innerHTML = "Talk to <span class=\"ttl-name\">" + HL.esc(empDef.name) + "</span>.";
+        } else if (profile.configured) {
+          title.innerHTML = "What should we get done, <span class=\"ttl-name\">" + HL.esc(profile.name.split(" ")[0]) + "</span>?";
+        } else {
+          title.innerHTML = "Where should we <span class=\"ttl-name\">start</span>?";
+        }
         root.appendChild(title);
 
         var bench = HL.el("div", "cc-bench");
@@ -97,11 +101,14 @@
         // the team, linked — glowing when active; click to talk to that bot
         var strip = HL.el("div", "cc-team");
         emps.forEach(function (e) {
+          var cell = HL.el("div", "cc-team-cell");
           var b = HL.el("button", "cc-team-m" + (e.enabled ? " on" : "") + (emp === e.id ? " sel" : ""));
           b.title = e.name + " — " + e.role + (e.enabled ? "" : " (off)");
           b.textContent = e.name.charAt(0);
           b.addEventListener("click", function () { location.hash = "#/overview?emp=" + e.id; });
-          strip.appendChild(b);
+          cell.appendChild(b);
+          cell.appendChild(HL.el("span", "tm-name", e.name));
+          strip.appendChild(cell);
         });
         var stripWrap = HL.el("div", "cc-teamwrap");
         stripWrap.appendChild(HL.el("div", "cc-teamlabel", "Your AI team"));

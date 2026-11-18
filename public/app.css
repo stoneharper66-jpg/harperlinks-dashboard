@@ -244,7 +244,14 @@ a{color:inherit;text-decoration:none}
 .bigcal-ev.grey{border-color:var(--border);color:var(--muted)}
 
 /* ===================== command centre (open, boxless) ===================== */
-.cc{display:flex;flex-direction:column;align-items:center;min-height:calc(100vh - 140px);padding-top:clamp(120px,26vh,320px)}
+.cc{position:relative;display:flex;flex-direction:column;align-items:center;min-height:calc(100vh - 140px);padding-top:clamp(120px,26vh,320px)}
+/* slow-breathing aurora behind the hero — pure ambience, zero layout impact */
+.cc::before,.cc::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(90px);pointer-events:none}
+.cc::before{width:560px;height:560px;left:calc(50% - 560px);top:6%;background:radial-gradient(circle,rgba(10,132,255,.17),transparent 65%);animation:auroraA 13s ease-in-out infinite}
+.cc::after{width:520px;height:520px;right:calc(50% - 560px);top:16%;background:radial-gradient(circle,rgba(255,45,146,.13),transparent 65%);animation:auroraB 17s ease-in-out infinite}
+@keyframes auroraA{50%{transform:translate(70px,40px) scale(1.12);opacity:.8}}
+@keyframes auroraB{50%{transform:translate(-60px,-30px) scale(1.15);opacity:.75}}
+.cc.engaged::before,.cc.engaged::after{display:none}
 .cc-main{width:min(840px,100%);display:flex;flex-direction:column;min-height:0}
 .cc:not(.engaged) .cc-main{flex:0 0 auto}
 /* engaged: chat docks bottom-left, live build panel on the right */
@@ -273,6 +280,8 @@ a{color:inherit;text-decoration:none}
 }
 .cc-title{font-family:var(--head);font-weight:500;font-size:clamp(28px,4.4vw,44px);letter-spacing:-0.02em;
   color:#E9EDF6;text-align:center;margin:0 0 38px;animation:ccIn .7s var(--ease-out) both}
+.cc-title .ttl-name{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+  -webkit-text-fill-color:transparent;font-weight:700}
 @keyframes ccIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .cc-chat{width:100%;display:flex;flex-direction:column;flex:1;min-height:0}
 .cc:not(.engaged) .cc-chat{flex:0 0 auto;min-height:0}
@@ -324,13 +333,25 @@ a{color:inherit;text-decoration:none}
 .cc-compose input::placeholder{color:var(--dim)}
 .cc-compose .send-btn{width:46px;height:46px;border-radius:50%}
 /* suggestion rows — no boxes */
-.cc-sugs{margin-top:40px;display:flex;flex-direction:column;gap:4px;width:min(600px,100%);animation:ccIn .7s .15s var(--ease-out) both}
-.cc-sug{display:flex;align-items:center;gap:15px;padding:13px 18px;border-radius:999px;background:none;border:none;
-  color:var(--muted);font-size:15.5px;cursor:pointer;text-align:left;font-family:var(--body);
-  transition:background .2s,color .2s,transform var(--t-fast) var(--ease-out)}
-.cc-sug:hover{background:rgba(255,255,255,.05);color:#fff;transform:translateX(3px)}
-.cc-sug svg{width:18px;height:18px;flex-shrink:0;stroke:var(--dim);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.cc-sug:hover svg{stroke:var(--accent)}
+.cc-sugs{margin-top:44px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:min(720px,100%);animation:ccIn .7s .15s var(--ease-out) both}
+@media(max-width:640px){.cc-sugs{grid-template-columns:1fr}}
+.cc-sug{position:relative;display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:16px;text-align:left;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);cursor:pointer;
+  color:var(--muted);font-size:14px;font-family:var(--body);line-height:1.45;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  transition:transform .22s var(--ease-out),border-color .22s,background .22s,box-shadow .22s}
+.cc-sug::before{content:"";position:absolute;inset:0;border-radius:16px;padding:1px;pointer-events:none;opacity:0;
+  background:linear-gradient(120deg,rgba(10,132,255,.55),rgba(255,45,146,.55));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  transition:opacity .25s}
+.cc-sug:hover{transform:translateY(-3px);background:rgba(255,255,255,.055);color:#fff;
+  box-shadow:0 14px 34px rgba(0,0,0,.35),0 0 26px rgba(10,132,255,.12)}
+.cc-sug:hover::before{opacity:1}
+.cc-sug svg{width:19px;height:19px;flex-shrink:0;stroke:var(--accent);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  box-sizing:content-box;padding:9px;border-radius:12px;background:rgba(10,132,255,.1);transition:background .25s,stroke .25s}
+.cc-sug:nth-child(even) svg{stroke:var(--accent2);background:rgba(255,45,146,.09)}
+.cc-sug:hover svg{background:rgba(10,132,255,.18)}
+.cc-sug:nth-child(even):hover svg{background:rgba(255,45,146,.16)}
 
 /* brand marks on the Integrations page */
 .brand-ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
@@ -559,8 +580,11 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
   animation:ccIn .7s .25s var(--ease-out) both}
 .cc.engaged .cc-teamwrap{display:none}
 .cc-teamlabel{font-family:var(--head);font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
-.cc-team{display:flex;gap:10px}
-.cc-team-m{width:40px;height:40px;border-radius:50%;border:1px solid rgba(110,160,255,.22);cursor:pointer;
+.cc-team{display:flex;gap:18px}
+.cc-team-cell{display:flex;flex-direction:column;align-items:center;gap:7px}
+.tm-name{font-size:11px;color:var(--dim);font-family:var(--head);letter-spacing:.02em;transition:color .2s}
+.cc-team-cell:hover .tm-name{color:var(--text)}
+.cc-team-m{width:46px;height:46px;border-radius:50%;border:1px solid rgba(110,160,255,.22);cursor:pointer;
   background:linear-gradient(145deg,rgba(10,132,255,.14),rgba(255,45,146,.1));color:#fff;
   font-family:var(--head);font-weight:700;font-size:14.5px;position:relative;
   transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .3s;opacity:.55}
