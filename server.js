@@ -18,6 +18,9 @@ const ghl = require("./src/ghl");
 const { resolveWhen, formatWhen } = require("./src/tools");
 
 const app = express();
+// Behind Railway/Render/Fly the real client sits past one proxy hop — trust it
+// so HTTPS detection and the rate-limiter's client IP are right in production.
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || 4700;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
@@ -42,7 +45,7 @@ app.post("/api/auth/setup", (req, res) => {
   try {
     const { name, email, password } = req.body || {};
     const user = auth.createUser({ name, email, password, role: "admin", accountId: tenant.MAIN });
-    res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(user.id)));
+    res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(user.id), req));
     tenant.run(tenant.MAIN, () => store.logActivity("auth", `Admin account created for ${user.email}`));
     res.json({ ok: true, user });
   } catch (e) {
@@ -54,12 +57,12 @@ app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body || {};
   const u = auth.login(email, password);
   if (!u) return res.status(401).json({ error: "Wrong email or password." });
-  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(u.id)));
+  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(u.id), req));
   res.json({ ok: true, user: auth.publicUser(u) });
 });
 
-app.post("/api/auth/logout", (_req, res) => {
-  res.setHeader("Set-Cookie", auth.clearCookie());
+app.post("/api/auth/logout", (req, res) => {
+  res.setHeader("Set-Cookie", auth.clearCookie(req));
   res.json({ ok: true });
 });
 

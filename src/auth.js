@@ -135,14 +135,19 @@ function readToken(token) {
   }
 }
 
-function cookieFor(token) {
-  // HttpOnly: page scripts can't read it. SameSite=Lax: other sites can't ride it.
-  // Add `Secure` automatically once this runs behind HTTPS.
-  const maxAge = SESSION_HOURS * 3600;
-  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+// Secure flag goes on automatically when the request arrived over HTTPS
+// (directly or via the host's proxy) — so cookies can't leak over plain http
+// in production, while localhost development keeps working.
+function isSecure(req) {
+  return !!(req && (req.secure || String(req.headers["x-forwarded-proto"] || "").split(",")[0] === "https"));
 }
-function clearCookie() {
-  return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+function cookieFor(token, req) {
+  // HttpOnly: page scripts can't read it. SameSite=Lax: other sites can't ride it.
+  const maxAge = SESSION_HOURS * 3600;
+  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${isSecure(req) ? "; Secure" : ""}`;
+}
+function clearCookie(req) {
+  return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure(req) ? "; Secure" : ""}`;
 }
 
 function userFromRequest(req) {
