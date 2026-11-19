@@ -67,7 +67,7 @@
       return '<svg class="px-bot" viewBox="0 0 28 30" shape-rendering="crispEdges" aria-hidden="true">' +
         '<g>' + body + '</g><g class="px-arm">' + arm + "</g></svg>";
     }
-    fab.innerHTML = botSVG() + '<span class="fab-tip">Ask HarperLinks</span>';
+    fab.innerHTML = '<span class="px-wrap">' + botSVG() + "</span>" + '<span class="fab-tip">Ask HarperLinks</span>';
     document.body.appendChild(fab);
 
     /* ---------- the panel ---------- */
@@ -121,7 +121,7 @@
        Release above the throw speed and he goes flying: gravity, wall
        bounces with a squash, spin from his horizontal speed, a dizzy
        wobble when he lands. Grab him mid-air to catch him. */
-    var bot = fab.querySelector(".px-bot");
+    var wrap = fab.querySelector(".px-wrap");
     var drag = null, flight = null;
     var calmMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -135,18 +135,46 @@
       fab.classList.add("impact");
       setTimeout(function () { fab.classList.remove("impact"); }, 200);
     }
+    // Commit wherever he is right now to real coordinates, then drop the
+    // flight transform — one frame, no jump. Without this a mid-air catch
+    // would teleport him back to where the throw began.
+    // Commit a position and drop the flight transform in ONE visual frame.
+    // The button has `transition: transform`, so clearing the transform
+    // without suppressing it would GLIDE him back over 250ms — that was a
+    // real bug: a mid-air catch sent him swooshing 100px+ from your hand.
+    function commitAt(px, py) {
+      fab.style.transition = "none";
+      fab.style.left = px + "px";
+      fab.style.top = py + "px";
+      fab.style.transform = "";
+      void fab.offsetWidth; // apply before the transition comes back
+      fab.style.transition = "";
+    }
     function stopFlight() {
       if (!flight) return;
       cancelAnimationFrame(flight.raf);
+      commitAt(flight.px, flight.py);
       flight = null;
       fab.classList.remove("flying");
-      bot.style.transform = "";
+      wrap.classList.remove("easeback");
+      wrap.style.transform = "";
     }
     function settleFlight() {
-      stopFlight();
-      fab.classList.add("dizzy");
-      setTimeout(function () { fab.classList.remove("dizzy"); }, 650);
-      place(fab.offsetLeft, fab.offsetTop);
+      var px = flight.px, py = flight.py;
+      cancelAnimationFrame(flight.raf);
+      flight = null;
+      commitAt(px, py);
+      fab.classList.remove("flying");
+      // ease his tilt back upright, THEN the dizzy wobble — no snap
+      wrap.classList.add("easeback");
+      wrap.style.transform = "rotate(0deg)";
+      setTimeout(function () {
+        wrap.classList.remove("easeback");
+        wrap.style.transform = "";
+        fab.classList.add("dizzy");
+        setTimeout(function () { fab.classList.remove("dizzy"); }, 650);
+      }, 300);
+      place(px, py);
       savePos();
     }
 
@@ -156,9 +184,10 @@
         fab.classList.remove("active");
       }
       fab.classList.add("flying");
-      var px = fab.offsetLeft, py = fab.offsetTop, rot = 0;
-      var G = 2600, BOUNCE = 0.58, started = performance.now(), last = started;
-      // cap it so a wild flick doesn't tunnel through a wall between frames
+      // freeze the origin; every frame moves a GPU transform, not layout
+      var ox = fab.offsetLeft, oy = fab.offsetTop;
+      var px = ox, py = oy, rot = 0;
+      var G = 2600, BOUNCE = 0.55, DRAG = 0.1, started = performance.now(), last = started;
       var sp = Math.hypot(vx, vy), MAX = 3200;
       if (sp > MAX) { vx *= MAX / sp; vy *= MAX / sp; }
 
@@ -170,6 +199,7 @@
         var minY = 8, floorY = window.innerHeight - h - 8;
 
         vy += G * dt;
+        vx *= Math.max(0, 1 - DRAG * dt); // a touch of air drag
         px += vx * dt;
         py += vy * dt;
 
@@ -180,21 +210,21 @@
         if (py >= floorY) {
           py = floorY;
           onFloor = true;
-          if (vy > 160) { vy = -vy * BOUNCE; vx *= 0.82; impact(); }
+          if (vy > 180) { vy = -vy * BOUNCE; vx *= 0.85; impact(); }
           else { vy = 0; }
-          vx *= Math.max(0, 1 - 5 * dt); // ground friction
+          vx *= Math.max(0, 1 - 5 * dt);
         }
 
-        rot += vx * dt * 0.4; // he tumbles with his momentum
-        fab.style.left = px + "px";
-        fab.style.top = py + "px";
-        bot.style.transform = "rotate(" + rot.toFixed(1) + "deg)";
+        rot += vx * dt * 0.3;
+        flight.px = px; flight.py = py;
+        fab.style.transform = "translate3d(" + (px - ox) + "px," + (py - oy) + "px,0)";
+        wrap.style.transform = "rotate(" + rot.toFixed(2) + "deg)";
 
         var done = onFloor && vy === 0 && Math.abs(vx) < 24;
         if (done || now - started > 7000) { settleFlight(); return; }
         flight.raf = requestAnimationFrame(frame);
       }
-      flight = { raf: requestAnimationFrame(frame) };
+      flight = { raf: requestAnimationFrame(frame), px: px, py: py };
     }
 
     fab.addEventListener("pointerdown", function (ev) {

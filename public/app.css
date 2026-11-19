@@ -877,8 +877,13 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .hl-fab.dragging .px-bot{animation:none;transform:rotate(-7deg) scale(1.12)}
 .hl-fab.dragging::after{opacity:.25;transform:translateX(-50%) scaleX(.6)}
 
-/* airborne: no bob, no ground shadow — JS drives position and tumble */
-.hl-fab.flying{transition:none}
+/* the tumble layer: spin lives here so squash on .px-bot never fights it */
+.px-wrap{display:block;line-height:0}
+.px-wrap.easeback{transition:transform .3s var(--ease-out)}
+
+/* airborne: no bob, no ground shadow — JS drives a GPU transform */
+.hl-fab.flying{transition:none;will-change:transform}
+.hl-fab.flying .px-wrap{will-change:transform}
 .hl-fab.flying .px-bot{animation:none}
 .hl-fab.flying::after{opacity:0}
 .hl-fab.flying .fab-tip{opacity:0}
