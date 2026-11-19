@@ -178,6 +178,37 @@
       savePos();
     }
 
+    /* ---- pixel dust ----
+       Particles are driven by the Web Animations API, so the compositor
+       animates them off the main thread — the trail costs the flight loop
+       nothing. Little squares, to match the pixel art. */
+    var dustLayer = null;
+    var DUST_INKS = ["#4D7CF0", "#8FB2F8", "#5FE9F7", "#D81B72"];
+    function dust(cx, cy, dvx, dvy, n, spread) {
+      if (!dustLayer) {
+        dustLayer = document.createElement("div");
+        dustLayer.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:1198;overflow:hidden";
+        document.body.appendChild(dustLayer);
+      }
+      if (dustLayer.childElementCount > 70) return; // cap, never jank
+      for (var i = 0; i < n; i++) {
+        var d = document.createElement("i");
+        var size = 3 + Math.random() * 4;
+        d.style.cssText = "position:absolute;left:0;top:0;width:" + size + "px;height:" + size +
+          "px;background:" + DUST_INKS[(Math.random() * DUST_INKS.length) | 0] +
+          ";border-radius:1px;will-change:transform,opacity";
+        dustLayer.appendChild(d);
+        var ang = Math.random() * 6.283, sp = spread * (0.3 + Math.random());
+        var dx = -dvx * 0.06 + Math.cos(ang) * sp;
+        var dy = -dvy * 0.06 + Math.sin(ang) * sp - 24 * Math.random();
+        d.animate([
+          { transform: "translate3d(" + cx + "px," + cy + "px,0) rotate(0deg) scale(1)", opacity: 0.95 },
+          { transform: "translate3d(" + (cx + dx) + "px," + (cy + dy) + "px,0) rotate(" + ((Math.random() - 0.5) * 200) + "deg) scale(.35)", opacity: 0 }
+        ], { duration: 380 + Math.random() * 260, easing: "cubic-bezier(.2,.7,.3,1)" })
+          .onfinish = (function (el) { return function () { el.remove(); }; })(d);
+      }
+    }
+
     function startThrow(vx, vy) {
       if (panel.classList.contains("open")) {
         panel.classList.remove("open");
@@ -203,14 +234,14 @@
         px += vx * dt;
         py += vy * dt;
 
-        if (px < minX) { px = minX; vx = -vx * BOUNCE; impact(); }
-        if (px > maxX) { px = maxX; vx = -vx * BOUNCE; impact(); }
-        if (py < minY) { py = minY; vy = -vy * BOUNCE; impact(); }
+        if (px < minX) { px = minX; vx = -vx * BOUNCE; impact(); dust(px + w / 2, py + h / 2, vx, vy, 9, 80); }
+        if (px > maxX) { px = maxX; vx = -vx * BOUNCE; impact(); dust(px + w / 2, py + h / 2, vx, vy, 9, 80); }
+        if (py < minY) { py = minY; vy = -vy * BOUNCE; impact(); dust(px + w / 2, py + h / 2, vx, vy, 9, 80); }
         var onFloor = false;
         if (py >= floorY) {
           py = floorY;
           onFloor = true;
-          if (vy > 180) { vy = -vy * BOUNCE; vx *= 0.85; impact(); }
+          if (vy > 180) { vy = -vy * BOUNCE; vx *= 0.85; impact(); dust(px + w / 2, py + h, vx, vy, 10, 90); }
           else { vy = 0; }
           vx *= Math.max(0, 1 - 5 * dt);
         }
@@ -218,7 +249,21 @@
         rot += vx * dt * 0.3;
         flight.px = px; flight.py = py;
         fab.style.transform = "translate3d(" + (px - ox) + "px," + (py - oy) + "px,0)";
-        wrap.style.transform = "rotate(" + rot.toFixed(2) + "deg)";
+
+        // squash-and-stretch ALONG the motion vector — rotate into the
+        // velocity frame, stretch, rotate back out into his tumble
+        var speed = Math.hypot(vx, vy);
+        var st = Math.min(0.2, (speed / 3200) * 0.22);
+        if (onFloor && vy === 0) st *= 0.3; // sliding, not flying
+        var th = Math.atan2(vy, vx) * 57.2958;
+        wrap.style.transform = "rotate(" + th.toFixed(1) + "deg) scale(" + (1 + st).toFixed(3) + "," + (1 - st).toFixed(3) + ") rotate(" + (rot - th).toFixed(1) + "deg)";
+
+        // trail: emit by distance travelled, so it's continuous at any speed
+        flight.trailAcc = (flight.trailAcc || 0) + speed * dt;
+        while (flight.trailAcc > 13) {
+          flight.trailAcc -= 13;
+          dust(px + w / 2, py + h / 2, vx, vy, 1, 15);
+        }
 
         var done = onFloor && vy === 0 && Math.abs(vx) < 24;
         if (done || now - started > 7000) { settleFlight(); return; }
