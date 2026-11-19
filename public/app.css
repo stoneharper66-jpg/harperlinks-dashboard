@@ -835,29 +835,59 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 }
 
 /* ======================= Ask HarperLinks — floating assistant =======================*/
-.hl-fab{position:fixed;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;cursor:grab;padding:0;
-  display:flex;align-items:center;justify-content:center;touch-action:none;
-  background:radial-gradient(circle at 32% 28%,rgba(14,17,22,.10),#FFFFFF 60%),rgba(255,255,255,.96);
-  border:1px solid rgba(14,17,22,.10);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  box-shadow:0 14px 40px rgba(14,17,22,.12),0 0 30px rgba(10,109,216,.18);
-  transition:transform .28s var(--ease-out),box-shadow .28s,border-color .28s}
-.hl-fab:hover{transform:translateY(-4px) scale(1.07);border-color:rgba(14,17,22,.10);
-  box-shadow:0 20px 52px rgba(14,17,22,.12),0 0 40px rgba(216,27,114,.3)}
-.hl-fab.dragging{cursor:grabbing;transform:scale(1.12);transition:none}
-.hl-fab.active{box-shadow:0 18px 50px rgba(14,17,22,.12),0 0 42px rgba(216,27,114,.34)}
-.fab-mark{width:30px;height:30px;position:relative;z-index:1;transition:transform .45s var(--ease-out)}
-.hl-fab:hover .fab-mark{transform:rotate(-12deg) scale(1.06)}
-.fab-ring{position:absolute;inset:-4px;border-radius:50%;pointer-events:none;
-  background:conic-gradient(from 0deg,rgba(10,109,216,.9),rgba(216,27,114,.9),rgba(10,109,216,.9));
-  opacity:0;filter:blur(7px);transition:opacity .3s;animation:fabSpin 4s linear infinite}
-.hl-fab:hover .fab-ring,.hl-fab.active .fab-ring{opacity:.65}
-@keyframes fabSpin{to{transform:rotate(360deg)}}
+.hl-fab{position:fixed;z-index:1200;width:62px;height:72px;border:none;background:none;padding:0;cursor:grab;
+  display:flex;align-items:flex-end;justify-content:center;touch-action:none;
+  transition:transform .25s var(--ease-out)}
+.hl-fab:hover{transform:translateY(-3px)}
+.hl-fab.dragging{cursor:grabbing;transition:none}
+
+/* the robot itself — pixel outline + soft glow drawn with stacked shadows */
+.px-bot{width:100%;height:auto;display:block;transform-origin:50% 90%;
+  filter:drop-shadow(1.2px 0 0 #1B2550) drop-shadow(-1.2px 0 0 #1B2550)
+         drop-shadow(0 1.2px 0 #1B2550) drop-shadow(0 -1.2px 0 #1B2550)
+         drop-shadow(0 10px 16px rgba(27,37,80,.28));
+  animation:botBob 3.4s ease-in-out infinite}
+@keyframes botBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+/* ground shadow that breathes with the bob */
+.hl-fab::after{content:"";position:absolute;left:50%;bottom:-4px;width:40px;height:9px;border-radius:50%;
+  transform:translateX(-50%);background:rgba(27,37,80,.22);filter:blur(3px);z-index:-1;
+  animation:botShadow 3.4s ease-in-out infinite}
+@keyframes botShadow{0%,100%{transform:translateX(-50%) scaleX(1);opacity:.8}50%{transform:translateX(-50%) scaleX(.78);opacity:.5}}
+
+/* terminal cursor blinks like a real prompt */
+.px-u{animation:pxBlink 1.1s steps(1) infinite}
+@keyframes pxBlink{0%,55%{opacity:1}56%,100%{opacity:0}}
+
+/* hover: excited squash-and-stretch, screen brightens, arm waves */
+.hl-fab:hover .px-bot{animation:botBob 3.4s ease-in-out infinite, botExcite .6s var(--ease-out)}
+@keyframes botExcite{0%{transform:scale(1,1)}30%{transform:scale(1.14,.84) rotate(-4deg)}
+  60%{transform:scale(.92,1.1) rotate(3deg)}80%{transform:scale(1.05,.97)}100%{transform:scale(1,1)}}
+.hl-fab:hover .px-c,.hl-fab:hover .px-u{filter:brightness(1.35) drop-shadow(0 0 1px #5FE9F7)}
+.px-arm{transform-box:view-box;transform-origin:20px 18px}
+.hl-fab:hover .px-arm{animation:botWave .7s ease-in-out}
+@keyframes botWave{0%,100%{transform:rotate(0)}30%{transform:rotate(-24deg)}55%{transform:rotate(10deg)}75%{transform:rotate(-14deg)}}
+
+/* click / open: a happy hop */
+.hl-fab.active .px-bot{animation:botBob 3.4s ease-in-out infinite, botHop .55s var(--ease-out)}
+@keyframes botHop{0%{transform:translateY(0) scale(1,1)}25%{transform:translateY(1px) scale(1.12,.82)}
+  55%{transform:translateY(-12px) scale(.94,1.1)}80%{transform:translateY(1px) scale(1.06,.94)}100%{transform:translateY(0) scale(1,1)}}
+
+/* mid-drag: he hangs on tight */
+.hl-fab.dragging .px-bot{animation:none;transform:rotate(-7deg) scale(1.12)}
+.hl-fab.dragging::after{opacity:.25;transform:translateX(-50%) scaleX(.6)}
+
 .fab-tip{position:absolute;right:calc(100% + 12px);top:50%;transform:translateY(-50%) translateX(6px);
   white-space:nowrap;font-size:12px;font-family:var(--head);font-weight:600;color:var(--text);
-  background:rgba(255,255,255,.97);border:1px solid var(--border);padding:6px 11px;border-radius:9px;
+  background:#FFFFFF;border:1px solid var(--border);padding:6px 11px;border-radius:9px;
+  box-shadow:0 8px 24px rgba(14,17,22,.12);
   opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
 .hl-fab:hover .fab-tip{opacity:1;transform:translateY(-50%) translateX(0)}
 .hl-fab.active .fab-tip,.hl-fab.dragging .fab-tip{opacity:0}
+
+@media(prefers-reduced-motion:reduce){
+  .px-bot,.hl-fab::after,.px-u,.px-arm{animation:none!important}
+}
 
 .hl-apanel{position:fixed;z-index:1199;width:min(370px,calc(100vw - 24px));display:flex;flex-direction:column;
   max-height:min(500px,70vh);border-radius:18px;overflow:hidden;
@@ -908,5 +938,5 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .ap-form button:hover{transform:scale(1.07) rotate(-6deg)}
 .ap-form button:active{transform:scale(.94)}
 @media(prefers-reduced-motion:reduce){
-  .hl-fab,.fab-mark,.fab-ring,.hl-apanel,.ap-m,.ap-think,.ap-step{animation:none!important;transition:none!important}
+  .hl-fab,.px-bot,.px-arm,.px-u,.hl-apanel,.ap-m,.ap-think,.ap-step{animation:none!important;transition:none!important}
 }

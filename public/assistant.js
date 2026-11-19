@@ -15,14 +15,59 @@
     fab.id = "hlFab";
     fab.type = "button";
     fab.setAttribute("aria-label", "Ask HarperLinks");
-    fab.innerHTML =
-      '<span class="fab-ring"></span>' +
-      '<svg class="fab-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true">' +
-      '<path d="M15 21l6-6" stroke="url(#gradStroke)" stroke-width="2.8" stroke-linecap="round"/>' +
-      '<path d="M13 23l-2.5 2.5a5 5 0 01-7-7L8 14a5 5 0 017 0" stroke="#4DA3FF" stroke-width="2.8" stroke-linecap="round"/>' +
-      '<path d="M23 13l2.5-2.5a5 5 0 017 7L28 22a5 5 0 01-7 0" stroke="#FF5CA8" stroke-width="2.8" stroke-linecap="round"/>' +
-      "</svg>" +
-      '<span class="fab-tip">Ask HarperLinks</span>';
+
+    /* The mascot: a pixel robot drawn cell-by-cell from this map, so it stays
+       crisp at any size and we can animate parts (arm wave, cursor blink).
+       B blue · L highlight · D shade · S screen · C cyan · U blinking cursor */
+    var ART = [
+      "..........BBBBBBBB..........",
+      "........BBBBBBBBBBBB........",
+      "....BLLBBBBBBBBBBBBBBBB.....",
+      "...BLBBBBBBBBBBBBBBBBBBB....",
+      ".BBBBBBBBBBBBBBBBBBBBBBBBB..",
+      "BLLBBBBBSSSSSSSSSSSSBBBBBBBB",
+      "BBBBBBBBSSCCSSSSSSSSBBBBBBBB",
+      "BBBBBBBBSSSCCSSSSSSSBBBBBBBB",
+      "BBBBBBBBSSSSCCSSSSSSBBBBBBBB",
+      "BBBBBBBBSSSCCSSSSSSSBBBBBBBB",
+      "BBBBBBBBSSCCSSSUUUSSBBBBBBBB",
+      "BBBBBBBBSSSSSSSSSSSSBBBBBBBB",
+      ".BBBBBBBBBBBBBBBBBBBBBBBBBB.",
+      ".BBBBBBBBBBBBBBBBBBBBBBBBBB.",
+      "..DDDDDDDDDDDDDDDDDDDDDDDD..",
+      "...DDDDDD..DDDDDD..DDDDDD...",
+      "............BBBB............",
+      "..........BBBBBBBB..........",
+      "......BBBBBBBBBBBBBBBB......",
+      ".....BBB.BBSSSSSSBB.BBB.....",
+      ".....BBB.BBSCCSCSBB.BBB.....",
+      ".....BBB.BBSSSSSSBB.BBB.....",
+      "......BB.BBBBBBBBBB.BB......",
+      ".........BBBBBBBBBB.........",
+      ".........BBBBBBBBBB.........",
+      ".........DBBBBBBBBD.........",
+      "..........BBB..BBB..........",
+      "..........BBB..BBB..........",
+      ".........BBBB..BBBB.........",
+      ".........DDDD..DDDD........."
+    ];
+    var INK = { B: "#4D7CF0", L: "#8FB2F8", D: "#3B5ED1", S: "#101831", C: "#5FE9F7", U: "#5FE9F7" };
+    function botSVG() {
+      var body = "", arm = "";
+      ART.forEach(function (row, y) {
+        for (var x = 0; x < row.length; x++) {
+          var ch = row[x];
+          if (ch === ".") continue;
+          var cls = ch === "U" ? ' class="px-u"' : ch === "C" ? ' class="px-c"' : "";
+          var r = '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + INK[ch] + '"' + cls + "/>";
+          // the right arm waves on hover, so it lives in its own group
+          if (y >= 18 && y <= 22 && x >= 19) arm += r; else body += r;
+        }
+      });
+      return '<svg class="px-bot" viewBox="0 0 28 30" shape-rendering="crispEdges" aria-hidden="true">' +
+        '<g>' + body + '</g><g class="px-arm">' + arm + "</g></svg>";
+    }
+    fab.innerHTML = botSVG() + '<span class="fab-tip">Ask HarperLinks</span>';
     document.body.appendChild(fab);
 
     /* ---------- the panel ---------- */
