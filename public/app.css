@@ -877,6 +877,18 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .hl-fab.dragging .px-bot{animation:none;transform:rotate(-7deg) scale(1.12)}
 .hl-fab.dragging::after{opacity:.25;transform:translateX(-50%) scaleX(.6)}
 
+/* airborne: no bob, no ground shadow — JS drives position and tumble */
+.hl-fab.flying{transition:none}
+.hl-fab.flying .px-bot{animation:none}
+.hl-fab.flying::after{opacity:0}
+.hl-fab.flying .fab-tip{opacity:0}
+/* wall/floor hit: a quick squash (the animation wins over his inline tumble) */
+.hl-fab.impact .px-bot{animation:botSquash .18s var(--ease-out)}
+@keyframes botSquash{0%{transform:scale(1.32,.62)}60%{transform:scale(.9,1.12)}100%{transform:scale(1,1)}}
+/* just landed: a woozy wobble, then the idle bob takes back over */
+.hl-fab.dizzy .px-bot{animation:botDizzy .65s var(--ease-out)}
+@keyframes botDizzy{0%{transform:rotate(9deg)}30%{transform:rotate(-7deg)}60%{transform:rotate(4deg)}100%{transform:rotate(0)}}
+
 .fab-tip{position:absolute;right:calc(100% + 12px);top:50%;transform:translateY(-50%) translateX(6px);
   white-space:nowrap;font-size:12px;font-family:var(--head);font-weight:600;color:var(--text);
   background:#FFFFFF;border:1px solid var(--border);padding:6px 11px;border-radius:9px;
@@ -939,4 +951,5 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .ap-form button:active{transform:scale(.94)}
 @media(prefers-reduced-motion:reduce){
   .hl-fab,.px-bot,.px-arm,.px-u,.hl-apanel,.ap-m,.ap-think,.ap-step{animation:none!important;transition:none!important}
+  /* reduced motion also disables the throw (handled in JS) */
 }

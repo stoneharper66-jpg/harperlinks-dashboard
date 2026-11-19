@@ -117,12 +117,94 @@
     var start = saved || { x: window.innerWidth - 86, y: window.innerHeight - 96 };
     place(start.x, start.y);
 
-    var drag = null;
+    /* ---------- drag, and THROW ----------
+       Release above the throw speed and he goes flying: gravity, wall
+       bounces with a squash, spin from his horizontal speed, a dizzy
+       wobble when he lands. Grab him mid-air to catch him. */
+    var bot = fab.querySelector(".px-bot");
+    var drag = null, flight = null;
+    var calmMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function savePos() {
+      var p = clamp(fab.offsetLeft, fab.offsetTop);
+      try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* ignore */ }
+    }
+    function impact() {
+      fab.classList.remove("impact");
+      void fab.offsetWidth;
+      fab.classList.add("impact");
+      setTimeout(function () { fab.classList.remove("impact"); }, 200);
+    }
+    function stopFlight() {
+      if (!flight) return;
+      cancelAnimationFrame(flight.raf);
+      flight = null;
+      fab.classList.remove("flying");
+      bot.style.transform = "";
+    }
+    function settleFlight() {
+      stopFlight();
+      fab.classList.add("dizzy");
+      setTimeout(function () { fab.classList.remove("dizzy"); }, 650);
+      place(fab.offsetLeft, fab.offsetTop);
+      savePos();
+    }
+
+    function startThrow(vx, vy) {
+      if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        fab.classList.remove("active");
+      }
+      fab.classList.add("flying");
+      var px = fab.offsetLeft, py = fab.offsetTop, rot = 0;
+      var G = 2600, BOUNCE = 0.58, started = performance.now(), last = started;
+      // cap it so a wild flick doesn't tunnel through a wall between frames
+      var sp = Math.hypot(vx, vy), MAX = 3200;
+      if (sp > MAX) { vx *= MAX / sp; vy *= MAX / sp; }
+
+      function frame(now) {
+        var dt = Math.min(0.03, (now - last) / 1000);
+        last = now;
+        var w = fab.offsetWidth, h = fab.offsetHeight;
+        var minX = 8, maxX = window.innerWidth - w - 8;
+        var minY = 8, floorY = window.innerHeight - h - 8;
+
+        vy += G * dt;
+        px += vx * dt;
+        py += vy * dt;
+
+        if (px < minX) { px = minX; vx = -vx * BOUNCE; impact(); }
+        if (px > maxX) { px = maxX; vx = -vx * BOUNCE; impact(); }
+        if (py < minY) { py = minY; vy = -vy * BOUNCE; impact(); }
+        var onFloor = false;
+        if (py >= floorY) {
+          py = floorY;
+          onFloor = true;
+          if (vy > 160) { vy = -vy * BOUNCE; vx *= 0.82; impact(); }
+          else { vy = 0; }
+          vx *= Math.max(0, 1 - 5 * dt); // ground friction
+        }
+
+        rot += vx * dt * 0.4; // he tumbles with his momentum
+        fab.style.left = px + "px";
+        fab.style.top = py + "px";
+        bot.style.transform = "rotate(" + rot.toFixed(1) + "deg)";
+
+        var done = onFloor && vy === 0 && Math.abs(vx) < 24;
+        if (done || now - started > 7000) { settleFlight(); return; }
+        flight.raf = requestAnimationFrame(frame);
+      }
+      flight = { raf: requestAnimationFrame(frame) };
+    }
+
     fab.addEventListener("pointerdown", function (ev) {
+      var caught = !!flight;
+      stopFlight(); // catching him mid-air
       drag = {
         dx: ev.clientX - fab.offsetLeft,
         dy: ev.clientY - fab.offsetTop,
-        moved: false,
+        moved: caught,       // a catch is a drag, never a click
+        trail: [],
       };
       fab.setPointerCapture(ev.pointerId);
       fab.classList.add("dragging");
@@ -131,21 +213,38 @@
       if (!drag) return;
       var nx = ev.clientX - drag.dx, ny = ev.clientY - drag.dy;
       if (Math.abs(nx - fab.offsetLeft) > 2 || Math.abs(ny - fab.offsetTop) > 2) drag.moved = true;
+      drag.trail.push({ x: nx, y: ny, t: performance.now() });
+      if (drag.trail.length > 8) drag.trail.shift();
       place(nx, ny);
     });
     function endDrag(ev) {
       if (!drag) return;
       fab.classList.remove("dragging");
       try { fab.releasePointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
-      var p = clamp(fab.offsetLeft, fab.offsetTop);
-      try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* ignore */ }
+
+      // velocity from the last ~100ms of movement
+      var vx = 0, vy = 0;
+      var trail = drag.trail, now = performance.now();
+      var old = null;
+      for (var i = 0; i < trail.length; i++) { if (now - trail[i].t <= 110) { old = trail[i]; break; } }
+      var cur = trail[trail.length - 1];
+      if (old && cur && cur.t > old.t) {
+        vx = (cur.x - old.x) / (cur.t - old.t) * 1000;
+        vy = (cur.y - old.y) / (cur.t - old.t) * 1000;
+      }
       var wasDrag = drag.moved;
       drag = null;
-      if (!wasDrag) toggle(); // a click, not a drag
+
+      if (!wasDrag) { savePos(); toggle(); return; }       // a click
+      if (!calmMotion && Math.hypot(vx, vy) > 620) {        // a throw
+        startThrow(vx, vy);
+        return;
+      }
+      savePos();                                            // a gentle place
     }
     fab.addEventListener("pointerup", endDrag);
     fab.addEventListener("pointercancel", endDrag);
-    window.addEventListener("resize", function () { place(fab.offsetLeft, fab.offsetTop); });
+    window.addEventListener("resize", function () { if (!flight) place(fab.offsetLeft, fab.offsetTop); });
 
     /* ---------- open / close ---------- */
     var greeted = false;
