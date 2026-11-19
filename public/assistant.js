@@ -274,6 +274,11 @@
     }
     fab.addEventListener("pointerup", endDrag);
     fab.addEventListener("pointercancel", endDrag);
+    // tab hidden mid-flight: rAF pauses, so land him now rather than resume
+    // a stale trajectory whenever the tab comes back
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden && flight) settleFlight();
+    });
     window.addEventListener("resize", function () { if (!flight) place(fab.offsetLeft, fab.offsetTop); });
 
     /* ---------- open / close ---------- */
