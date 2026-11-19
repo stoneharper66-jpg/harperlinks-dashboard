@@ -3,7 +3,7 @@
     "id": "task_mwlgrser1",
     "what": "Call Terry",
     "dueAt": "2026-11-19T01:00:00.000Z",
-    "status": "open",
+    "status": "due",
     "createdAt": "2026-11-18T01:50:04.947Z"
   }
 ]

@@ -643,11 +643,16 @@
         stage.appendChild(viewport);
 
         var frame = null;
+        function shimmer() {
+          viewport.classList.remove("refreshing");
+          void viewport.offsetWidth;          // restart the animation
+          viewport.classList.add("refreshing");
+          setTimeout(function () { viewport.classList.remove("refreshing"); }, 950);
+        }
         function reloadFrame() {
           if (!frame) return;
-          viewport.classList.add("refreshing");
+          shimmer();
           frame.src = (isBuilt ? site.publicPath : site.externalUrl) + (isBuilt ? "?t=" + Date.now() : "");
-          setTimeout(function () { viewport.classList.remove("refreshing"); }, 500);
         }
 
         function iconBtn(label, svg, fn) {
@@ -669,6 +674,7 @@
           frame.src = site.publicPath + "?t=" + Date.now();
           frame.title = "Live preview of your website";
           viewport.appendChild(frame);
+          shimmer();
           barActions.appendChild(iconBtn("Refresh preview", IC_REFRESH, reloadFrame));
           var openA = HL.el("a", "wact");
           openA.href = site.publicPath; openA.target = "_blank"; openA.rel = "noopener";
@@ -755,7 +761,12 @@
             thinkRow.appendChild(m);
             busy = false;
             askBtn.disabled = false;
-            if (ok) setTimeout(function () { HL.navigate(); }, 1400); // re-render with the new site
+            if (ok && done) {
+              // the work really happened — show it, then re-render with it
+              stage.classList.add("landed");
+              reloadFrame();
+              setTimeout(function () { HL.navigate(); }, 1800);
+            }
           }
 
           // the AI gets told where the request came from, so a bare "add our

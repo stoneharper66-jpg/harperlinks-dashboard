@@ -317,8 +317,10 @@ a{color:inherit;text-decoration:none}
   background-size:280% 100%;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
-  animation:ringFlow 5.5s linear infinite;opacity:.95;
-  filter:drop-shadow(0 0 7px rgba(110,160,255,.55)) drop-shadow(0 0 14px rgba(255,92,168,.3));animation:composeBreathe 4.5s ease-in-out infinite}
+  opacity:.95;
+  filter:drop-shadow(0 0 7px rgba(110,160,255,.55)) drop-shadow(0 0 14px rgba(255,92,168,.3));
+  /* both, comma-separated — a second `animation:` line would cancel the first */
+  animation:ringFlow 5.5s linear infinite, composeBreathe 4.5s ease-in-out infinite}
 @keyframes ringFlow{0%{background-position:160% 0}100%{background-position:-120% 0}}
 /* neon halo breathing behind the pill */
 .cc-compose::after{content:"";position:absolute;inset:-34px -46px;border-radius:999px;pointer-events:none;z-index:-1;
@@ -689,92 +691,147 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .emp-acts .btn{flex:1}
 
 /* ======================= Website Manager =======================*/
-.whead{display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.wsite{position:relative}
+.whead{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;
+  animation:ccIn .5s var(--ease-out) both}
 .whead-l{flex:1;min-width:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.whead-title{font-size:19px;font-weight:700}
-.wchip{font-size:11px;font-weight:600;letter-spacing:.04em;padding:5px 11px;border-radius:99px;white-space:nowrap}
+.whead-title{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.wchip{font-size:11px;font-weight:600;letter-spacing:.04em;padding:5px 12px;border-radius:99px;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:6px}
+.wchip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .wchip.live{color:var(--ok);background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3)}
+.wchip.live::before{box-shadow:0 0 8px currentColor;animation:bpulse 2.2s ease-in-out infinite}
 .wchip.ext{color:var(--accent);background:var(--accent-tint);border:1px solid var(--accent-border)}
 .wchip.none{color:var(--dim);background:rgba(255,255,255,.04);border:1px solid var(--border)}
-.wdevs{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px}
-.wdev{width:34px;height:30px;border:none;border-radius:8px;background:none;color:var(--dim);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.wdevs{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:13px}
+.wdev{width:36px;height:31px;border:none;border-radius:9px;background:none;color:var(--dim);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background .22s,color .22s,transform .22s}
 .wdev svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.wdev:hover{color:var(--text)}
-.wdev.on{background:var(--accent-tint);color:var(--accent)}
+.wdev:hover{color:var(--text);transform:translateY(-1px)}
+.wdev.on{background:var(--accent-tint);color:var(--accent);box-shadow:0 0 14px rgba(10,132,255,.2)}
 
-.wstage{border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.09);
-  background:rgba(255,255,255,.03);box-shadow:0 22px 60px rgba(0,0,0,.42)}
-.wbar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,.04);
+/* the stage sits on its own soft glow */
+.wstage{position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.03);box-shadow:0 26px 70px rgba(0,0,0,.5);
+  animation:ccIn .6s .05s var(--ease-out) both}
+.wstage::after{content:"";position:absolute;inset:-30px;z-index:-1;pointer-events:none;border-radius:40px;
+  background:radial-gradient(ellipse 60% 70% at 30% 10%,rgba(10,132,255,.2),transparent 70%),
+             radial-gradient(ellipse 60% 70% at 75% 90%,rgba(255,45,146,.15),transparent 70%);
+  filter:blur(34px);animation:haloBreathe 7s ease-in-out infinite}
+.wbar{display:flex;align-items:center;gap:12px;padding:11px 14px;background:rgba(255,255,255,.045);
   border-bottom:1px solid rgba(255,255,255,.07)}
 .wdots{display:flex;gap:6px;flex:none}
 .wdots i{width:10px;height:10px;border-radius:50%}
 .wdots i:nth-child(1){background:rgba(255,95,86,.75)}
 .wdots i:nth-child(2){background:rgba(255,189,46,.75)}
 .wdots i:nth-child(3){background:rgba(39,201,63,.75)}
-.waddr{flex:1;min-width:0;font-size:12px;color:var(--dim);background:rgba(0,0,0,.32);border-radius:99px;
-  padding:6px 14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.waddr{flex:1;min-width:0;font-size:12px;color:var(--dim);background:rgba(0,0,0,.34);border-radius:99px;
+  padding:7px 15px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:ui-monospace,Menlo,monospace}
 .wbar-act{display:flex;gap:6px;flex:none}
-.wact{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,.04);
+.wact{width:33px;height:33px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.04);
   color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .wact svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.wact:hover{color:var(--text);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08)}
+.wact:hover{color:#fff;border-color:rgba(110,160,255,.45);background:rgba(10,132,255,.14);transform:translateY(-1px)}
+.wact:active{transform:scale(.94)}
 
-/* the viewport resizes to the chosen device, centred on a neutral stage */
-.wview{position:relative;height:min(58vh,520px);background:#0E0F16;display:flex;justify-content:center;
-  transition:background .3s}
-.wview.dev-desktop{padding:0}
-.wview.dev-tablet{padding:14px 0}
-.wview.dev-phone{padding:14px 0}
-.wframe{width:100%;height:100%;border:0;display:block;background:#fff;transition:width .35s var(--ease-out),border-radius .35s}
-.wview.dev-tablet .wframe{width:768px;max-width:100%;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.wview.dev-phone .wframe{width:390px;max-width:100%;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.wview.refreshing::after{content:"";position:absolute;inset:0;background:rgba(14,15,22,.55);
-  backdrop-filter:blur(2px);animation:ccIn .25s var(--ease-out) both;pointer-events:none}
-.wblocked{position:absolute;left:0;right:0;bottom:0;padding:11px 16px;font-size:12px;line-height:1.5;
-  color:var(--muted);background:rgba(10,11,16,.93);border-top:1px solid var(--border)}
-.wempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:13px;text-align:center;padding:30px}
-.wempty .we-ic{font-size:42px;background:var(--grad);-webkit-background-clip:text;background-clip:text;
-  color:transparent;-webkit-text-fill-color:transparent}
-.wempty h3{font-size:20px}
-.wempty p{margin:0;max-width:440px;color:var(--muted);font-size:13.5px;line-height:1.65}
+/* viewport — device frames with real bezels */
+.wview{position:relative;height:min(62vh,580px);background:
+  radial-gradient(ellipse 80% 60% at 50% 0%,rgba(255,255,255,.04),transparent 70%),#0C0D14;
+  display:flex;align-items:center;justify-content:center;transition:background .3s}
+.wframe{width:100%;height:100%;border:0;display:block;background:#fff;
+  transition:width .4s var(--ease-out),height .4s var(--ease-out),border-radius .4s}
+.wview.dev-tablet{padding:16px 0}
+.wview.dev-phone{padding:16px 0}
+.wview.dev-tablet .wframe{width:744px;max-width:calc(100% - 40px);height:100%;border-radius:10px}
+.wview.dev-phone .wframe{width:360px;max-width:calc(100% - 40px);height:100%;border-radius:26px}
+/* the bezel is drawn around the frame, so it reads as a device not a box */
+.wview.dev-tablet::before,.wview.dev-phone::before{content:"";position:absolute;top:8px;bottom:8px;
+  border:10px solid #16181F;border-radius:22px;pointer-events:none;
+  box-shadow:0 0 0 1px rgba(255,255,255,.09),0 24px 60px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+.wview.dev-tablet::before{width:764px;max-width:calc(100% - 20px)}
+.wview.dev-phone::before{width:380px;max-width:calc(100% - 20px);border-radius:38px;border-width:12px}
+/* phone speaker notch */
+.wview.dev-phone::after{content:"";position:absolute;top:20px;width:92px;height:7px;border-radius:99px;
+  background:#16181F;box-shadow:0 0 0 1px rgba(255,255,255,.06);pointer-events:none}
 
-/* ask-for-a-change */
-.wask{margin-top:16px}
-.wask-form{display:flex;gap:10px}
-.wask-input{flex:1}
-.wask-form .btn{white-space:nowrap}
-.wchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+/* loading shimmer while the page comes in, and a flash when a change lands */
+.wview.refreshing::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:linear-gradient(100deg,transparent 20%,rgba(10,132,255,.14) 45%,rgba(255,45,146,.12) 55%,transparent 80%);
+  background-size:220% 100%;animation:wshimmer .9s var(--ease-out)}
+@keyframes wshimmer{from{background-position:180% 0}to{background-position:-80% 0}}
+.wstage.landed{animation:wland .9s var(--ease-out)}
+@keyframes wland{0%{box-shadow:0 26px 70px rgba(0,0,0,.5),0 0 0 0 rgba(52,211,153,.5)}
+  40%{box-shadow:0 26px 70px rgba(0,0,0,.5),0 0 0 4px rgba(52,211,153,.28)}
+  100%{box-shadow:0 26px 70px rgba(0,0,0,.5),0 0 0 0 rgba(52,211,153,0)}}
+
+.wblocked{position:absolute;left:0;right:0;bottom:0;z-index:4;padding:11px 16px;font-size:12px;line-height:1.5;
+  color:var(--muted);background:rgba(10,11,16,.94);border-top:1px solid var(--border)}
+.wempty{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;text-align:center;padding:30px}
+.wempty .we-ic{font-size:46px;background:var(--grad);background-size:220% 100%;-webkit-background-clip:text;
+  background-clip:text;color:transparent;-webkit-text-fill-color:transparent;animation:ttlShimmer 5s linear infinite}
+.wempty h3{font-size:21px;letter-spacing:-.02em}
+.wempty p{margin:0;max-width:450px;color:var(--muted);font-size:13.5px;line-height:1.65}
+
+/* ---- ask for a change: the signature composer pill ---- */
+.wask{margin-top:30px;display:flex;flex-direction:column;align-items:center}
+.wask-form{position:relative;display:flex;align-items:center;gap:10px;width:min(760px,100%);
+  background:rgba(255,255,255,.055);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:7px 7px 7px 22px;
+  box-shadow:0 20px 54px rgba(0,0,0,.45),0 0 38px rgba(10,132,255,.12),inset 0 1px 0 rgba(255,255,255,.08);
+  transition:border-color .25s,box-shadow .25s}
+.wask-form::before{content:"";position:absolute;inset:-2px;border-radius:999px;padding:2px;pointer-events:none;
+  background:linear-gradient(110deg,rgba(110,160,255,.08) 0%,rgba(110,160,255,.9) 22%,rgba(255,92,168,.9) 42%,rgba(110,160,255,.08) 62%);
+  background-size:280% 100%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  opacity:.9;filter:drop-shadow(0 0 6px rgba(110,160,255,.5));
+  animation:ringFlow 5.5s linear infinite, composeBreathe 4.5s ease-in-out infinite}
+.wask-form:focus-within{border-color:rgba(110,160,255,.45);box-shadow:0 22px 58px rgba(0,0,0,.5),0 0 48px rgba(10,132,255,.2)}
+.wask-input{flex:1;background:none!important;border:none!important;outline:none;color:var(--text);font-size:14.5px;padding:10px 0}
+.wask-input::placeholder{color:var(--dim)}
+.wask-form .btn{flex:none;border-radius:999px;padding:11px 20px;white-space:nowrap}
+.wask-form .btn:disabled{opacity:.5;cursor:default}
+.wchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
 .wchip-s{font-size:12.5px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);
-  padding:7px 13px;border-radius:99px;cursor:pointer;transition:all .2s}
-.wchip-s:hover{color:#fff;border-color:rgba(110,160,255,.4);background:rgba(10,132,255,.1);transform:translateY(-1px)}
-.wask-think{display:none;margin-bottom:12px;padding:12px 15px;border-radius:14px;
-  background:rgba(123,92,255,.07);border:1px solid rgba(123,92,255,.2);animation:ccIn .3s var(--ease-out) both}
+  padding:8px 14px;border-radius:99px;cursor:pointer;transition:all .22s;animation:ccIn .5s var(--ease-out) both}
+.wchip-s:nth-child(2){animation-delay:.06s}.wchip-s:nth-child(3){animation-delay:.12s}.wchip-s:nth-child(4){animation-delay:.18s}
+.wchip-s:hover{color:#fff;border-color:rgba(110,160,255,.45);background:rgba(10,132,255,.12);transform:translateY(-2px);
+  box-shadow:0 8px 22px rgba(10,132,255,.18)}
+
+.wask-think{display:none;width:min(760px,100%);margin-bottom:14px;padding:13px 17px;border-radius:16px;
+  background:rgba(123,92,255,.07);border:1px solid rgba(123,92,255,.22);animation:ccIn .35s var(--ease-out) both}
 .wask-think.on{display:block}
 .wt-head{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;font-family:var(--head);color:var(--muted)}
 .wt-dots{display:inline-flex;gap:3px}
 .wt-dots i{width:5px;height:5px;border-radius:50%;background:var(--accent2);animation:tdot 1.2s ease-in-out infinite}
 .wt-dots i:nth-child(2){animation-delay:.15s}.wt-dots i:nth-child(3){animation-delay:.3s}
-.wt-steps{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.wt-steps{display:flex;flex-direction:column;gap:5px;margin-top:9px}
 .wt-step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);animation:ccIn .25s var(--ease-out) both}
 .wt-step.pending{color:var(--dim)}
 .wt-ok{color:var(--ok);font-weight:700}
 .wt-bad{color:var(--warn);font-weight:700}
 .wt-spin{width:10px;height:10px;border-radius:50%;flex:none;border:1.5px solid var(--border);
   border-top-color:var(--accent2);animation:tspin .7s linear infinite}
-.wt-reply{margin-top:10px;font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap}
+.wt-reply{margin-top:11px;font-size:13.2px;line-height:1.6;color:var(--text);white-space:pre-wrap}
 .wt-reply.bad{color:var(--warn)}
 
-/* lower tools */
-.wtools{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:22px}
-.wver{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+/* ---- lower tools ---- */
+.wtools{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:34px}
+.wver{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .wver:last-child{border-bottom:none}
 .wver-l{flex:1;min-width:0}
 .wver-note{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wver-at{font-size:11.5px;color:var(--dim);margin-top:2px}
-.wnote{margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.55}
-@media(max-width:860px){.wview{height:50vh}.wask-form{flex-direction:column}}
+.wnote{margin:11px 0 0;font-size:11.5px;color:var(--dim);line-height:1.55}
+@media(max-width:860px){
+  .wview{height:52vh}
+  .wask-form{flex-direction:row}
+  .wview.dev-tablet .wframe,.wview.dev-phone .wframe{max-width:calc(100% - 30px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .wstage::after,.wask-form::before,.wempty .we-ic,.wchip.live::before,.wchip-s{animation:none!important}
+}
 
 /* ======================= Ask HarperLinks — floating assistant =======================*/
 .hl-fab{position:fixed;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;cursor:grab;padding:0;
