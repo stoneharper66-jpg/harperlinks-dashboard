@@ -28,6 +28,31 @@ const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// ---- CORS for the marketing site -------------------------------------------
+// The site's robot can act as the signed-in owner: when the owner's browser
+// already holds a dashboard session, the site may call the real API with
+// credentials. That only works for origins on this allowlist — never "*",
+// because credentialed CORS with a wildcard is exactly how cookies leak.
+// Anonymous visitors never pass the auth gate regardless.
+const SITE_ORIGINS = new Set(
+  String(process.env.SITE_ORIGINS || "http://localhost:4870,http://127.0.0.1:4870")
+    .split(",").map((o) => o.trim()).filter(Boolean)
+);
+app.use("/api", (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && SITE_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Vary", "Origin");
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE");
+      return res.status(204).end();
+    }
+  }
+  next();
+});
+
 // The dashboard is its own application now — it lives at the root.
 // /app is kept as a redirect so old links still land somewhere sensible.
 app.get("/", (req, res) => {
