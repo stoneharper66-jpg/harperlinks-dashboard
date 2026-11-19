@@ -4,31 +4,31 @@
 <meta charset="utf-8" />
 <title>Sign in — HarperLinks</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0A0B10" />
+<meta name="theme-color" content="#F6F8FC" />
 <link rel="stylesheet" href="app.css" />
 <style>
   .gate{min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px;
     background:
-      radial-gradient(900px 500px at 15% -10%, rgba(10,132,255,.14), transparent 60%),
-      radial-gradient(900px 500px at 95% 110%, rgba(255,45,146,.12), transparent 60%),
-      var(--bg, #0A0B10)}
-  .gate-card{width:min(420px,100%);background:var(--panel,rgba(255,255,255,.03));border:1px solid var(--border,rgba(255,255,255,.1));
-    border-radius:20px;padding:34px 30px;backdrop-filter:blur(14px)}
+      radial-gradient(900px 500px at 15% -10%, rgba(10,109,216,.08), transparent 60%),
+      radial-gradient(900px 500px at 95% 110%, rgba(216,27,114,.06), transparent 60%),
+      var(--bg, #F6F8FC)}
+  .gate-card{width:min(420px,100%);background:var(--panel,#FFFFFF);border:1px solid var(--border,rgba(14,17,22,.1));
+    border-radius:20px;padding:34px 30px;box-shadow:0 18px 50px rgba(14,17,22,.10)}
   .gate-brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
   .gate-brand .logo-word{font-size:21px}
-  .gate-sub{text-align:center;color:var(--muted,#A3A8B8);font-size:13.5px;margin:0 0 26px}
+  .gate-sub{text-align:center;color:var(--muted,#55606E);font-size:13.5px;margin:0 0 26px}
   .gate-field{margin-bottom:14px}
-  .gate-field label{display:block;font-size:12px;color:var(--muted,#A3A8B8);margin-bottom:6px;font-weight:600}
-  .gate-field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,.12));
-    background:rgba(255,255,255,.04);color:var(--text,#EDEFF5);font-size:14.5px;outline:none;transition:border-color .2s}
-  .gate-field input:focus{border-color:#0A84FF}
+  .gate-field label{display:block;font-size:12px;color:var(--muted,#55606E);margin-bottom:6px;font-weight:600}
+  .gate-field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border,rgba(14,17,22,.12));
+    background:#FFFFFF;color:var(--text,#0E1116);font-size:14.5px;outline:none;transition:border-color .2s}
+  .gate-field input:focus{border-color:#0A6DD8;box-shadow:0 0 0 3px rgba(10,109,216,.12)}
   .gate-btn{width:100%;margin-top:8px;padding:13px;border:none;border-radius:12px;cursor:pointer;font-weight:700;font-size:15px;
-    color:#fff;background:linear-gradient(120deg,#0A84FF,#FF2D92);transition:opacity .2s,transform .15s}
+    color:#fff;background:linear-gradient(120deg,#0A6DD8,#D81B72);transition:opacity .2s,transform .15s}
   .gate-btn:hover{opacity:.92;transform:translateY(-1px)}
   .gate-btn:disabled{opacity:.5;cursor:default;transform:none}
   .gate-err{display:none;margin:0 0 14px;padding:10px 13px;border-radius:10px;font-size:13px;
-    background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.3);color:#ff9d9d}
-  .gate-note{margin-top:18px;text-align:center;color:var(--dim,#5E6372);font-size:12px;line-height:1.6}
+    background:rgba(214,69,69,.07);border:1px solid rgba(214,69,69,.28);color:#B32626}
+  .gate-note{margin-top:18px;text-align:center;color:var(--dim,#7A8494);font-size:12px;line-height:1.6}
 </style>
 </head>
 <body>
