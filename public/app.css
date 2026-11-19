@@ -689,30 +689,92 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .emp-acts .btn{flex:1}
 
 /* ======================= Website Manager =======================*/
+.whead{display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.whead-l{flex:1;min-width:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.whead-title{font-size:19px;font-weight:700}
+.wchip{font-size:11px;font-weight:600;letter-spacing:.04em;padding:5px 11px;border-radius:99px;white-space:nowrap}
+.wchip.live{color:var(--ok);background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3)}
+.wchip.ext{color:var(--accent);background:var(--accent-tint);border:1px solid var(--accent-border)}
+.wchip.none{color:var(--dim);background:rgba(255,255,255,.04);border:1px solid var(--border)}
+.wdevs{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px}
+.wdev{width:34px;height:30px;border:none;border-radius:8px;background:none;color:var(--dim);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.wdev svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wdev:hover{color:var(--text)}
+.wdev.on{background:var(--accent-tint);color:var(--accent)}
+
 .wstage{border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.09);
   background:rgba(255,255,255,.03);box-shadow:0 22px 60px rgba(0,0,0,.42)}
 .wbar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,.04);
   border-bottom:1px solid rgba(255,255,255,.07)}
-.wdots{display:flex;gap:6px}
-.wdots i{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.14)}
-.wdots i:nth-child(1){background:rgba(255,95,86,.7)}
-.wdots i:nth-child(2){background:rgba(255,189,46,.7)}
-.wdots i:nth-child(3){background:rgba(39,201,63,.7)}
-.waddr{flex:1;min-width:0;font-size:12px;color:var(--dim);background:rgba(0,0,0,.3);border-radius:99px;
+.wdots{display:flex;gap:6px;flex:none}
+.wdots i{width:10px;height:10px;border-radius:50%}
+.wdots i:nth-child(1){background:rgba(255,95,86,.75)}
+.wdots i:nth-child(2){background:rgba(255,189,46,.75)}
+.wdots i:nth-child(3){background:rgba(39,201,63,.75)}
+.waddr{flex:1;min-width:0;font-size:12px;color:var(--dim);background:rgba(0,0,0,.32);border-radius:99px;
   padding:6px 14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.wbar-act{display:flex;gap:7px;flex:none}
-.wview{position:relative;height:min(62vh,560px);background:#fff}
-.wframe{width:100%;height:100%;border:0;display:block;background:#fff}
-.wblocked{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;font-size:12px;line-height:1.5;
+.wbar-act{display:flex;gap:6px;flex:none}
+.wact{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,.04);
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.wact svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.wact:hover{color:var(--text);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08)}
+
+/* the viewport resizes to the chosen device, centred on a neutral stage */
+.wview{position:relative;height:min(58vh,520px);background:#0E0F16;display:flex;justify-content:center;
+  transition:background .3s}
+.wview.dev-desktop{padding:0}
+.wview.dev-tablet{padding:14px 0}
+.wview.dev-phone{padding:14px 0}
+.wframe{width:100%;height:100%;border:0;display:block;background:#fff;transition:width .35s var(--ease-out),border-radius .35s}
+.wview.dev-tablet .wframe{width:768px;max-width:100%;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.wview.dev-phone .wframe{width:390px;max-width:100%;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.wview.refreshing::after{content:"";position:absolute;inset:0;background:rgba(14,15,22,.55);
+  backdrop-filter:blur(2px);animation:ccIn .25s var(--ease-out) both;pointer-events:none}
+.wblocked{position:absolute;left:0;right:0;bottom:0;padding:11px 16px;font-size:12px;line-height:1.5;
   color:var(--muted);background:rgba(10,11,16,.93);border-top:1px solid var(--border)}
 .wempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:12px;text-align:center;padding:30px;background:var(--bg)}
-.wempty .we-ic{font-size:40px;background:var(--grad);-webkit-background-clip:text;background-clip:text;
+  gap:13px;text-align:center;padding:30px}
+.wempty .we-ic{font-size:42px;background:var(--grad);-webkit-background-clip:text;background-clip:text;
   color:transparent;-webkit-text-fill-color:transparent}
-.wempty h3{font-size:19px}
-.wempty p{margin:0;max-width:430px;color:var(--muted);font-size:13.5px;line-height:1.65}
-.wtools{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
-@media(max-width:860px){.wtools{grid-template-columns:1fr}.wview{height:52vh}}
+.wempty h3{font-size:20px}
+.wempty p{margin:0;max-width:440px;color:var(--muted);font-size:13.5px;line-height:1.65}
+
+/* ask-for-a-change */
+.wask{margin-top:16px}
+.wask-form{display:flex;gap:10px}
+.wask-input{flex:1}
+.wask-form .btn{white-space:nowrap}
+.wchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.wchip-s{font-size:12.5px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);
+  padding:7px 13px;border-radius:99px;cursor:pointer;transition:all .2s}
+.wchip-s:hover{color:#fff;border-color:rgba(110,160,255,.4);background:rgba(10,132,255,.1);transform:translateY(-1px)}
+.wask-think{display:none;margin-bottom:12px;padding:12px 15px;border-radius:14px;
+  background:rgba(123,92,255,.07);border:1px solid rgba(123,92,255,.2);animation:ccIn .3s var(--ease-out) both}
+.wask-think.on{display:block}
+.wt-head{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;font-family:var(--head);color:var(--muted)}
+.wt-dots{display:inline-flex;gap:3px}
+.wt-dots i{width:5px;height:5px;border-radius:50%;background:var(--accent2);animation:tdot 1.2s ease-in-out infinite}
+.wt-dots i:nth-child(2){animation-delay:.15s}.wt-dots i:nth-child(3){animation-delay:.3s}
+.wt-steps{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.wt-step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);animation:ccIn .25s var(--ease-out) both}
+.wt-step.pending{color:var(--dim)}
+.wt-ok{color:var(--ok);font-weight:700}
+.wt-bad{color:var(--warn);font-weight:700}
+.wt-spin{width:10px;height:10px;border-radius:50%;flex:none;border:1.5px solid var(--border);
+  border-top-color:var(--accent2);animation:tspin .7s linear infinite}
+.wt-reply{margin-top:10px;font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap}
+.wt-reply.bad{color:var(--warn)}
+
+/* lower tools */
+.wtools{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:22px}
+.wver{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.wver:last-child{border-bottom:none}
+.wver-l{flex:1;min-width:0}
+.wver-note{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wver-at{font-size:11.5px;color:var(--dim);margin-top:2px}
+.wnote{margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.55}
+@media(max-width:860px){.wview{height:50vh}.wask-form{flex-direction:column}}
 
 /* ======================= Ask HarperLinks — floating assistant =======================*/
 .hl-fab{position:fixed;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;cursor:grab;padding:0;

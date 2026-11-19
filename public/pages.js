@@ -588,8 +588,46 @@
       return Promise.all([HL.api("/api/website"), HL.api("/api/profile")]).then(function (res) {
         var site = res[0], profile = res[1];
         var root = HL.el("div", "wsite");
+        var isBuilt = site.mode === "built" && site.publicPath;
+        var isExternal = site.mode === "external" && site.externalUrl;
 
-        /* ---- the live preview, front and centre ---- */
+        /* ================= header: what this is, and its state ================= */
+        var head = HL.el("div", "whead");
+        var hl = HL.el("div", "whead-l");
+        hl.appendChild(HL.el("h2", "whead-title", isBuilt ? (site.title || "Your website") : isExternal ? "Your website" : "Your website"));
+        var statusText = isBuilt ? "Built by your AI team · updated " + HL.fmtWhen(site.updatedAt)
+          : isExternal ? "Linked — hosted elsewhere"
+          : "Not set up yet";
+        var chip = HL.el("span", "wchip " + (isBuilt ? "live" : isExternal ? "ext" : "none"), statusText);
+        hl.appendChild(chip);
+        head.appendChild(hl);
+
+        /* device switcher — only meaningful when there's something to preview */
+        var currentDevice = "desktop";
+        var viewport;
+        if (isBuilt || isExternal) {
+          var devices = HL.el("div", "wdevs");
+          [["desktop", "Desktop", '<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
+           ["tablet", "Tablet", '<svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M11 18.5h2"/></svg>'],
+           ["phone", "Phone", '<svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>']
+          ].forEach(function (d) {
+            var b = HL.el("button", "wdev" + (d[0] === "desktop" ? " on" : ""));
+            b.type = "button";
+            b.title = d[1];
+            b.innerHTML = d[2];
+            b.addEventListener("click", function () {
+              currentDevice = d[0];
+              devices.querySelectorAll(".wdev").forEach(function (x) { x.classList.remove("on"); });
+              b.classList.add("on");
+              viewport.className = "wview dev-" + d[0];
+            });
+            devices.appendChild(b);
+          });
+          head.appendChild(devices);
+        }
+        root.appendChild(head);
+
+        /* ================= the preview stage ================= */
         var stage = HL.el("div", "wstage");
         var bar = HL.el("div", "wbar");
         var dots = HL.el("div", "wdots");
@@ -601,73 +639,185 @@
         bar.appendChild(barActions);
         stage.appendChild(bar);
 
-        var viewport = HL.el("div", "wview");
+        viewport = HL.el("div", "wview dev-desktop");
         stage.appendChild(viewport);
 
-        function openBtn(href, label) {
-          var a = HL.el("a", "btn ghost sm", label || "Open ↗");
-          a.href = href; a.target = "_blank"; a.rel = "noopener";
-          return a;
+        var frame = null;
+        function reloadFrame() {
+          if (!frame) return;
+          viewport.classList.add("refreshing");
+          frame.src = (isBuilt ? site.publicPath : site.externalUrl) + (isBuilt ? "?t=" + Date.now() : "");
+          setTimeout(function () { viewport.classList.remove("refreshing"); }, 500);
         }
 
-        if (site.mode === "built" && site.publicPath) {
+        function iconBtn(label, svg, fn) {
+          var b = HL.el("button", "wact");
+          b.type = "button";
+          b.title = label;
+          b.setAttribute("aria-label", label);
+          b.innerHTML = svg;
+          b.addEventListener("click", fn);
+          return b;
+        }
+        var IC_REFRESH = '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>';
+        var IC_OPEN = '<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>';
+
+        if (isBuilt) {
           addr.textContent = location.origin + site.publicPath;
-          var fr = document.createElement("iframe");
-          fr.className = "wframe";
-          fr.src = site.publicPath + "?t=" + Date.now();
-          fr.title = "Live preview of your website";
-          viewport.appendChild(fr);
-          barActions.appendChild(openBtn(site.publicPath));
-          if (site.versions && site.versions.length) {
-            var undo = HL.el("button", "btn ghost sm", "Undo last change");
-            undo.addEventListener("click", function () {
-              HL.post("/api/website/restore", {})
-                .then(function () { HL.toast("Rolled back to the previous version"); HL.navigate(); })
-                .catch(function (e) { HL.toast(e.message, true); });
-            });
-            barActions.appendChild(undo);
-          }
-        } else if (site.mode === "external" && site.externalUrl) {
+          frame = document.createElement("iframe");
+          frame.className = "wframe";
+          frame.src = site.publicPath + "?t=" + Date.now();
+          frame.title = "Live preview of your website";
+          viewport.appendChild(frame);
+          barActions.appendChild(iconBtn("Refresh preview", IC_REFRESH, reloadFrame));
+          var openA = HL.el("a", "wact");
+          openA.href = site.publicPath; openA.target = "_blank"; openA.rel = "noopener";
+          openA.title = "Open in a new tab"; openA.innerHTML = IC_OPEN;
+          barActions.appendChild(openA);
+        } else if (isExternal) {
           addr.textContent = site.externalUrl;
-          var ef = document.createElement("iframe");
-          ef.className = "wframe";
-          ef.src = site.externalUrl;
-          ef.title = "Preview of your website";
-          viewport.appendChild(ef);
-          // Plenty of sites refuse to be framed. Say so plainly rather than
-          // leaving a mysterious white rectangle.
+          frame = document.createElement("iframe");
+          frame.className = "wframe";
+          frame.src = site.externalUrl;
+          frame.title = "Preview of your website";
+          viewport.appendChild(frame);
           var warn = HL.el("div", "wblocked");
-          warn.innerHTML = "If this stays blank, your website blocks being shown inside other pages — that's a setting on their end, not a fault here. <br/>Use <b>Open ↗</b> to view it, or ask your AI team to build you a HarperLinks page.";
+          warn.innerHTML = "Blank? Your website blocks being shown inside other pages — that's a setting on their end, not a fault here. Use the open button, or ask your AI team to build you a HarperLinks page.";
           viewport.appendChild(warn);
-          barActions.appendChild(openBtn(site.externalUrl));
+          var openB = HL.el("a", "wact");
+          openB.href = site.externalUrl; openB.target = "_blank"; openB.rel = "noopener";
+          openB.title = "Open in a new tab"; openB.innerHTML = IC_OPEN;
+          barActions.appendChild(openB);
         } else {
           addr.textContent = "No website yet";
           var empty = HL.el("div", "wempty");
-          empty.innerHTML = "<div class=\'we-ic\'>◧</div>" +
-            "<h3>No website yet</h3>" +
-            "<p>Your AI team can write you a complete one-page site — hero, services, why-choose-us and contact — in about a minute. Or link the site you already have.</p>";
-          var mk = HL.el("button", "btn", "Build my website with AI");
-          mk.addEventListener("click", function () {
-            location.hash = "#/overview";
-            setTimeout(function () {
-              var inp = document.querySelector(".cc-compose input");
-              if (inp) {
-                var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-                d.set.call(inp, "Build me a website for my business");
-                inp.dispatchEvent(new Event("input", { bubbles: true }));
-                inp.focus();
-              }
-            }, 400);
-          });
+          empty.innerHTML =
+            '<div class="we-ic">◧</div>' +
+            "<h3>Let's build you a website</h3>" +
+            "<p>Your AI team writes the whole thing — hero, what you do, why people choose you, how to reach you — using what it knows about your business. About a minute.</p>";
+          var mk = HL.el("button", "btn", "Build it now");
+          mk.addEventListener("click", function () { askAI("Build me a website for my business"); });
           empty.appendChild(mk);
           viewport.appendChild(empty);
         }
         root.appendChild(stage);
 
-        /* ---- link an existing site ---- */
+        /* ================= ask-for-a-change bar ================= */
+        var askWrap = HL.el("div", "wask");
+        var thinkRow = HL.el("div", "wask-think");
+        askWrap.appendChild(thinkRow);
+
+        var askForm = HL.el("form", "wask-form");
+        var askInput = HL.input(isBuilt
+          ? "Tell your AI team what to change…"
+          : "Describe the site you want…");
+        askInput.className = "input wask-input";
+        var askBtn = HL.el("button", "btn", isBuilt ? "Make the change" : "Build it");
+        askBtn.type = "submit";
+        askForm.appendChild(askInput);
+        askForm.appendChild(askBtn);
+        askWrap.appendChild(askForm);
+
+        var chips = HL.el("div", "wchips");
+        (isBuilt
+          ? ["Make the hero darker", "Add our opening hours", "Add a contact section", "Make it feel more premium"]
+          : ["Build me a website", "Build a one-page site with my services", "Make me a landing page for bookings"]
+        ).forEach(function (t) {
+          var c = HL.el("button", "wchip-s", t);
+          c.type = "button";
+          c.addEventListener("click", function () { askAI(t); });
+          chips.appendChild(c);
+        });
+        askWrap.appendChild(chips);
+        root.appendChild(askWrap);
+
+        var busy = false;
+        function askAI(text) {
+          if (busy || !text.trim()) return;
+          busy = true;
+          askBtn.disabled = true;
+          askInput.value = "";
+          thinkRow.innerHTML = "";
+          thinkRow.classList.add("on");
+          var head2 = HL.el("div", "wt-head");
+          head2.innerHTML = '<span class="wt-dots"><i></i><i></i><i></i></span><span class="wt-label">Thinking…</span>';
+          thinkRow.appendChild(head2);
+          var steps = HL.el("div", "wt-steps");
+          thinkRow.appendChild(steps);
+
+          var waiting = {}, done = 0, settled = false;
+          function label(t) { return (HL.STEP_LABELS && HL.STEP_LABELS[t]) || t.replace(/_/g, " "); }
+          function finish(msg, ok) {
+            settled = true;
+            head2.querySelector(".wt-dots").remove();
+            head2.querySelector(".wt-label").textContent = done ? "Did " + done + " step" + (done > 1 ? "s" : "") : "Done";
+            var m = HL.el("div", "wt-reply" + (ok ? "" : " bad"), msg);
+            thinkRow.appendChild(m);
+            busy = false;
+            askBtn.disabled = false;
+            if (ok) setTimeout(function () { HL.navigate(); }, 1400); // re-render with the new site
+          }
+
+          // the AI gets told where the request came from, so a bare "add our
+          // hours" is understood as a change to this site, not a new topic
+          var framed = "[Request from the Website page" +
+            (isBuilt ? " — a HarperLinks-built site already exists; read it and edit it" : "") +
+            "] " + text;
+          HL.stream("/api/chat/stream", { sessionId: "website-" + HL.sessionId, message: framed }, function (ev) {
+            if (ev.phase === "model") head2.querySelector(".wt-label").textContent = "Thinking…";
+            else if (ev.phase === "tool-start") {
+              head2.querySelector(".wt-label").textContent = "Working…";
+              var r = HL.el("div", "wt-step pending");
+              r.innerHTML = '<span class="wt-spin"></span><span>' + HL.esc(label(ev.tool)) + "</span>";
+              steps.appendChild(r);
+              (waiting[ev.tool] = waiting[ev.tool] || []).push(r);
+            } else if (ev.phase === "step") {
+              var row = (waiting[ev.tool] || []).shift();
+              if (!row) { row = HL.el("div", "wt-step"); steps.appendChild(row); }
+              row.className = "wt-step";
+              row.innerHTML = (ev.ok ? '<span class="wt-ok">✓</span>' : '<span class="wt-bad">!</span>') +
+                "<span>" + HL.esc(label(ev.tool)) + "</span>";
+              done++;
+            } else if (ev.phase === "done") finish(ev.reply || "Done.", true);
+            else if (ev.phase === "error") finish(ev.error, false);
+          }).then(function () {
+            if (!settled) finish("The connection dropped mid-change — nothing was lost, try again.", false);
+          }).catch(function (e) {
+            if (!settled) finish(e.message || "Couldn't reach your AI team.", false);
+          });
+        }
+        askForm.addEventListener("submit", function (e) { e.preventDefault(); askAI(askInput.value); });
+
+        /* ================= lower tools ================= */
         var tools = HL.el("div", "wtools");
 
-        var linkCard = HL.panel("Already have a website?", "We'll preview it here and learn your voice from it");
+        /* version history */
+        if (isBuilt && site.versions && site.versions.length) {
+          var hist = HL.panel("Earlier versions", "Every change is reversible");
+          var hb = HL.el("div", "panel-body");
+          site.versions.slice().reverse().forEach(function (v, i) {
+            var realIndex = site.versions.length - 1 - i;
+            var vr = HL.el("div", "wver");
+            var vl = HL.el("div", "wver-l");
+            vl.appendChild(HL.el("div", "wver-note", v.note || "earlier version"));
+            vl.appendChild(HL.el("div", "wver-at", HL.fmtWhen(v.at)));
+            vr.appendChild(vl);
+            var rb = HL.el("button", "btn ghost sm", "Restore");
+            rb.addEventListener("click", function () {
+              rb.disabled = true; rb.textContent = "Restoring…";
+              HL.post("/api/website/restore", { index: realIndex })
+                .then(function () { HL.toast("Restored"); HL.navigate(); })
+                .catch(function (err) { HL.toast(err.message, true); rb.disabled = false; rb.textContent = "Restore"; });
+            });
+            vr.appendChild(rb);
+            hb.appendChild(vr);
+          });
+          hist.appendChild(hb);
+          tools.appendChild(hist);
+        }
+
+        /* link an existing site */
+        var linkCard = HL.panel(isExternal ? "Linked website" : "Already have a website?", "We'll preview it here and learn your voice from it");
         var lb = HL.el("div", "panel-body");
         var lrow = HL.el("div", "ingest-row");
         var lurl = HL.input(site.externalUrl || "https://yourbusiness.com");
@@ -683,10 +833,14 @@
         });
         lrow.appendChild(lurl); lrow.appendChild(lgo);
         lb.appendChild(lrow);
+        if (isBuilt) {
+          var note = HL.el("p", "wnote", "Linking an outside site replaces this preview. Your built page stays at its address and can be restored above.");
+          lb.appendChild(note);
+        }
         linkCard.appendChild(lb);
         tools.appendChild(linkCard);
 
-        /* ---- what the AI knows ---- */
+        /* what the AI knows */
         var know = HL.panel("What your AI team knows", profile.configured ? "Learned " + HL.fmtDay(profile.ingestedAt) : "Nothing yet");
         var kb = HL.el("div", "panel-body");
         if (profile.configured) {
@@ -703,7 +857,7 @@
             var r2 = HL.el("div", "pf-row");
             r2.appendChild(HL.el("span", "pf-label", "Services"));
             var tags = HL.el("div", "pf-tags");
-            profile.services.forEach(function (s) { tags.appendChild(HL.el("span", "pf-tag", s)); });
+            profile.services.forEach(function (sv) { tags.appendChild(HL.el("span", "pf-tag", sv)); });
             r2.appendChild(tags);
             kb.appendChild(r2);
           }
@@ -714,16 +868,11 @@
         tools.appendChild(know);
 
         root.appendChild(tools);
-
-        var hint = HL.el("p", "sec-intro", "Tip: ask your AI team things like \u201cmake the hero darker\u201d or \u201cadd a section about our opening hours\u201d \u2014 it edits this page and the preview updates.");
-        hint.style.marginTop = "18px";
-        root.appendChild(hint);
         return root;
       });
     },
   };
 
-  /* ================= ANALYTICS ================= */
   HL.pages.analytics = {
     title: "Analytics",
     render: function () {

@@ -12,7 +12,12 @@ const dt = require("./datetime");
 
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.ANTHROPIC_MODEL || process.env.MODEL || "claude-opus-4-8";
-const EFFORT = process.env.EFFORT || "low";
+// "low" makes the model consolidate and finish early — fine for a one-shot
+// answer, wrong for multi-step work (read the page → edit it → report back),
+// where it would describe the change instead of making it. "high" is the
+// right default now the AI genuinely builds things; the spend cap is the
+// guardrail, and EFFORT= can still override per install.
+const EFFORT = process.env.EFFORT || "high";
 
 let anthropic = null;
 if (HAS_KEY) {
@@ -67,7 +72,10 @@ async function respondLive(session, userMessage, employeeId, onStep) {
 
     const resp = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 2048,
+      // Big enough to write a whole web page in one tool call. At 2048 the
+      // model would start a build_website/edit_website call, run out of room
+      // mid-HTML, and we'd hand back its preamble as if it were the answer.
+      max_tokens: 16000,
       output_config: { effort: EFFORT },
       system,
       tools: toolSchemas,
@@ -75,6 +83,19 @@ async function respondLive(session, userMessage, employeeId, onStep) {
     });
 
     session.history.push({ role: "assistant", content: resp.content });
+
+    // Ran out of output room: say so instead of passing off a half-finished
+    // thought as a completed job.
+    if (resp.stop_reason === "max_tokens") {
+      const partial = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+      budget.record("claude.message", 1, "chat turn (hit output limit)");
+      return {
+        reply: (partial ? partial + "\n\n" : "") +
+          "— I ran out of room part-way through that one and stopped rather than leave it half-done. Ask me again, or break it into smaller changes.",
+        actions,
+        steps,
+      };
+    }
 
     if (resp.stop_reason === "tool_use") {
       const results = [];

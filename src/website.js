@@ -63,15 +63,32 @@ function saveHtml(html, { title, note } = {}) {
   return get();
 }
 
-function restorePrevious() {
+// Restore an earlier version. Omit the index for "the one before this".
+// The version you're leaving is kept too, so a restore is itself undoable.
+function restore(index) {
   const w = raw();
-  const prev = (w.versions || []).pop();
-  if (!prev) throw new Error("There's no earlier version to go back to.");
-  w.html = prev.html;
+  const versions = w.versions || [];
+  if (!versions.length) throw new Error("There's no earlier version to go back to.");
+  const i = index === undefined || index === null ? versions.length - 1 : Number(index);
+  if (!Number.isInteger(i) || i < 0 || i >= versions.length) throw new Error("That version doesn't exist.");
+  const target = versions[i];
+  const current = w.html;
+  versions.splice(i, 1);
+  if (current) {
+    versions.push({ at: w.updatedAt || new Date().toISOString(), note: w.lastNote || "before restore", html: current });
+    while (versions.length > MAX_VERSIONS) versions.shift();
+  }
+  w.versions = versions;
+  w.html = target.html;
+  w.lastNote = `restored "${target.note || "earlier version"}"`;
   w.updatedAt = new Date().toISOString();
   store.saveCol("website", w);
-  store.logActivity("website", "Website rolled back to the previous version");
+  store.logActivity("website", `Website restored to an earlier version (${target.note || "no note"})`);
   return get();
 }
 
-module.exports = { get, setExternal, saveHtml, restorePrevious };
+function restorePrevious() {
+  return restore(undefined);
+}
+
+module.exports = { get, setExternal, saveHtml, restore, restorePrevious };

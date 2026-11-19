@@ -653,9 +653,9 @@ app.post("/api/website/link", (req, res) => {
   }
 });
 
-app.post("/api/website/restore", (_req, res) => {
+app.post("/api/website/restore", (req, res) => {
   try {
-    res.json(website.restorePrevious());
+    res.json(website.restore((req.body || {}).index));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
