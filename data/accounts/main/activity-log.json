@@ -130,5 +130,23 @@
     "type": "website",
     "message": "Website draft saved — Premium refresh: Fraunces serif display headlines, deeper near-black palette with gold accent, roomier spacing, refined cards with gradient hover, gold-lettered eyebrows, trust strip",
     "refId": null
+  },
+  {
+    "at": "2026-11-20T01:28:18.240Z",
+    "type": "website",
+    "message": "Website draft saved — Added meta description; confirmed page is fully self-contained",
+    "refId": null
+  },
+  {
+    "at": "2026-11-20T01:28:19.825Z",
+    "type": "website",
+    "message": "Website published — passed the security scan (100% overall)",
+    "refId": null
+  },
+  {
+    "at": "2026-11-20T02:00:22.676Z",
+    "type": "failed",
+    "message": "Couldn't publish tiktok post — No tiktok account connected in GHL's Social Planner. Connect one there and it'll publish next time.",
+    "refId": "post_mwlm5xgh5"
   }
 ]

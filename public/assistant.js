@@ -53,32 +53,50 @@
     ];
     var INK = { B: "#4D7CF0", L: "#8FB2F8", D: "#3B5ED1", S: "#101831", C: "#5FE9F7", U: "#5FE9F7" };
     function botSVG() {
-      var body = "", arm = "";
+      var body = "", arm = "", face = "";
       ART.forEach(function (row, y) {
         for (var x = 0; x < row.length; x++) {
           var ch = row[x];
           if (ch === ".") continue;
           var cls = ch === "U" ? ' class="px-u"' : ch === "C" ? ' class="px-c"' : "";
           var r = '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + INK[ch] + '"' + cls + "/>";
-          // the right arm waves on hover, so it lives in its own group
-          if (y >= 18 && y <= 22 && x >= 19) arm += r; else body += r;
+          if (y >= 18 && y <= 22 && x >= 19) arm += r;                 // waving arm
+          else if ((ch === "C" || ch === "U") && y <= 11) face += r;   // the normal face
+          else body += r;
         }
       });
+      // the OUCH face: X X eyes and a flat little mouth, shown on impacts
+      var hurt = "";
+      [[6,10],[6,12],[7,11],[8,10],[8,12],  [6,15],[6,17],[7,16],[8,15],[8,17],
+       [10,12],[10,13],[10,14],[10,15]].forEach(function (c) {
+        hurt += '<rect x="' + c[1] + '" y="' + c[0] + '" width="1" height="1" fill="#FF6B81"/>';
+      });
       return '<svg class="px-bot" viewBox="0 0 28 30" shape-rendering="crispEdges" aria-hidden="true">' +
-        '<g>' + body + '</g><g class="px-arm">' + arm + "</g></svg>";
+        '<g>' + body + '</g><g class="face-normal">' + face + '</g><g class="face-hurt">' + hurt + '</g><g class="px-arm">' + arm + "</g></svg>";
     }
     fab.innerHTML = '<span class="px-wrap">' + botSVG() + "</span>" + '<span class="fab-tip">Ask HarperLinks</span>';
     document.body.appendChild(fab);
 
     /* ---------- the panel ---------- */
+    // a tiny version of him for the header and beside his messages
+    function miniBot(px) {
+      return '<span class="ap-av" style="width:' + px + 'px;height:' + (px * 30 / 28).toFixed(0) + 'px">' + botSVG() + "</span>";
+    }
     var panel = HL.el("div", "hl-apanel");
     panel.id = "hlAPanel";
     panel.innerHTML =
       '<div class="ap-head">' +
-        '<span class="ap-title"><span class="ap-spark">✦</span> Ask HarperLinks</span>' +
+        miniBot(26) +
+        '<span class="ap-who"><span class="ap-title">HarperLinks Assistant</span>' +
+        '<span class="ap-sub"><i class="ap-on"></i>online · does real work</span></span>' +
         '<button class="ap-x" type="button" aria-label="Close">×</button>' +
       "</div>" +
       '<div class="ap-msgs" id="apMsgs"></div>' +
+      '<div class="ap-chips">' +
+        '<button type="button">Write 3 posts for this week</button>' +
+        '<button type="button">What\'s my day look like?</button>' +
+        '<button type="button">Build me an automation</button>' +
+      "</div>" +
       '<form class="ap-form"><input type="text" placeholder="Ask, or tell me to do something…" maxlength="500" autocomplete="off" /><button type="submit" aria-label="Send">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>' +
       "</button></form>";
@@ -87,6 +105,13 @@
     var msgs = panel.querySelector(".ap-msgs");
     var form = panel.querySelector(".ap-form");
     var input = panel.querySelector(".ap-form input");
+    var chips = panel.querySelector(".ap-chips");
+    chips.querySelectorAll("button").forEach(function (c) {
+      c.addEventListener("click", function () {
+        input.value = c.textContent;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    });
 
     /* ---------- position: restore, drag, remember ---------- */
     function clamp(x, y) {
@@ -134,6 +159,8 @@
       void fab.offsetWidth;
       fab.classList.add("impact");
       setTimeout(function () { fab.classList.remove("impact"); }, 200);
+      hurtFace(450);
+      say("hit");
     }
     // Commit wherever he is right now to real coordinates, then drop the
     // flight transform — one frame, no jump. Without this a mid-air catch
@@ -172,10 +199,49 @@
         wrap.classList.remove("easeback");
         wrap.style.transform = "";
         fab.classList.add("dizzy");
+        hurtFace(700);
+        say("land", true);
         setTimeout(function () { fab.classList.remove("dizzy"); }, 650);
       }, 300);
       place(px, py);
       savePos();
+    }
+
+    /* ---- he has feelings ----
+       Short speech bubbles that float up from wherever he is, and an ouch
+       face that flashes on when he hits something. */
+    var LINES = {
+      throw_: ["WHEEE!", "aaaAAAH!", "not again!!", "I regret nothing!", "airborne!!"],
+      hit: ["ow!", "oof!", "my pixels!!", "bonk", "ouch.", "that's a wall!"],
+      land: ["...where am I?", "I'm fine. totally fine.", "rude.", "again! again!", "ow. just... ow."],
+      pickup: ["hm?", "where we going?", "easy now…", "wait wait wait—"],
+    };
+    var lastSay = 0;
+    function say(kind, force) {
+      var now = Date.now();
+      if (!force && now - lastSay < 600) return; // don't gabble
+      lastSay = now;
+      var pool = LINES[kind] || [];
+      if (!pool.length) return;
+      var b = document.createElement("div");
+      b.className = "px-say";
+      b.textContent = pool[(Math.random() * pool.length) | 0];
+      document.body.appendChild(b);
+      var r = fab.getBoundingClientRect();
+      var cx = r.left + r.width / 2, cy = r.top - 8;
+      b.animate([
+        { transform: "translate(-50%,0) translate(" + cx + "px," + cy + "px) scale(.6)", opacity: 0 },
+        { transform: "translate(-50%,-12px) translate(" + cx + "px," + cy + "px) scale(1)", opacity: 1, offset: 0.18 },
+        { transform: "translate(-50%,-30px) translate(" + cx + "px," + cy + "px) scale(1)", opacity: 1, offset: 0.75 },
+        { transform: "translate(-50%,-46px) translate(" + cx + "px," + cy + "px) scale(.92)", opacity: 0 }
+      ], { duration: 1150, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = function () { b.remove(); };
+    }
+    var botEl = null;
+    function hurtFace(ms) {
+      botEl = botEl || fab.querySelector(".px-bot");
+      botEl.classList.add("hurt");
+      clearTimeout(hurtFace._t);
+      hurtFace._t = setTimeout(function () { botEl.classList.remove("hurt"); }, ms || 500);
     }
 
     /* ---- pixel dust ----
@@ -215,6 +281,7 @@
         fab.classList.remove("active");
       }
       fab.classList.add("flying");
+      say("throw_", true);
       // freeze the origin; every frame moves a GPU transform, not layout
       var ox = fab.offsetLeft, oy = fab.offsetTop;
       var px = ox, py = oy, rot = 0;
@@ -287,7 +354,10 @@
     fab.addEventListener("pointermove", function (ev) {
       if (!drag) return;
       var nx = ev.clientX - drag.dx, ny = ev.clientY - drag.dy;
-      if (Math.abs(nx - fab.offsetLeft) > 2 || Math.abs(ny - fab.offsetTop) > 2) drag.moved = true;
+      if (Math.abs(nx - fab.offsetLeft) > 2 || Math.abs(ny - fab.offsetTop) > 2) {
+        if (!drag.moved) say("pickup");
+        drag.moved = true;
+      }
       drag.trail.push({ x: nx, y: ny, t: performance.now() });
       if (drag.trail.length > 8) drag.trail.shift();
       place(nx, ny);
@@ -351,9 +421,20 @@
 
     /* ---------- messages ---------- */
     function add(kind, text) {
-      var el = HL.el("div", "ap-m " + kind);
-      el.textContent = text;
-      msgs.appendChild(el);
+      var el;
+      if (kind.indexOf("bot") === 0) {
+        var row = HL.el("div", "ap-row");
+        row.innerHTML = miniBot(20);
+        el = HL.el("div", "ap-m " + kind);
+        el.textContent = text;
+        row.appendChild(el);
+        msgs.appendChild(row);
+      } else {
+        el = HL.el("div", "ap-m " + kind);
+        el.textContent = text;
+        msgs.appendChild(el);
+      }
+      if (msgs.children.length > 1) chips.classList.add("off");
       msgs.scrollTop = msgs.scrollHeight;
       return el;
     }

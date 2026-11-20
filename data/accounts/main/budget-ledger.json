@@ -182,5 +182,21 @@
     "units": 1,
     "cost": 0.045,
     "note": "chat turn"
+  },
+  {
+    "at": "2026-11-20T01:28:23.165Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-20T01:56:52.871Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
   }
 ]

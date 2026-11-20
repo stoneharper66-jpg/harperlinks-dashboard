@@ -1125,3 +1125,39 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .tm-name{margin-top:2px}
 
 @media(prefers-reduced-motion:reduce){.work-pill,.work-done,.wscan-line .wsl-bar,.workdot{animation:none!important}}
+
+/* ======================= robot feelings ======================= */
+.px-bot .face-hurt{display:none}
+.px-bot.hurt .face-normal{display:none}
+.px-bot.hurt .face-hurt{display:block}
+.px-say{position:fixed;left:0;top:0;z-index:1302;pointer-events:none;white-space:nowrap;
+  font-family:var(--head);font-weight:800;font-size:11.5px;letter-spacing:.02em;color:#1B2550;
+  background:#FFFFFF;border:2px solid #1B2550;border-radius:10px;padding:4px 10px;
+  box-shadow:2.5px 2.5px 0 #1B2550;will-change:transform,opacity}
+
+/* ======================= assistant chat box v2 ======================= */
+.hl-apanel{width:min(390px,calc(100vw - 24px));max-height:min(560px,74vh);border-radius:20px}
+.ap-head{display:flex;align-items:center;gap:11px;padding:13px 16px}
+.ap-av{display:inline-flex;flex:none;line-height:0}
+.ap-av .px-bot{width:100%;height:auto;animation:none;filter:drop-shadow(.8px 0 0 #1B2550) drop-shadow(-.8px 0 0 #1B2550)
+  drop-shadow(0 .8px 0 #1B2550) drop-shadow(0 -.8px 0 #1B2550)}
+.ap-av .px-u{animation:pxBlink 1.1s steps(1) infinite}
+.ap-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.ap-title{font-family:var(--head);font-weight:800;font-size:14px;letter-spacing:-.01em}
+.ap-sub{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);font-family:var(--head);font-weight:600}
+.ap-on{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 7px rgba(23,166,115,.6);
+  animation:bpulse 2.4s ease-in-out infinite}
+.ap-row{display:flex;align-items:flex-end;gap:7px;max-width:94%;animation:apIn .32s var(--ease-out) both}
+.ap-row .ap-m{animation:none;max-width:none;min-width:0}
+.ap-row .ap-av{margin-bottom:2px}
+.ap-chips{display:flex;flex-wrap:wrap;gap:7px;padding:4px 14px 10px;transition:opacity .3s,max-height .3s}
+.ap-chips.off{display:none}
+.ap-chips button{font-size:12px;color:var(--muted);background:#FFFFFF;border:1px solid rgba(14,17,22,.12);
+  padding:7px 12px;border-radius:99px;cursor:pointer;font-family:var(--head);font-weight:600;
+  transition:all .2s;animation:ccIn .4s var(--ease-out) both}
+.ap-chips button:nth-child(2){animation-delay:.06s}
+.ap-chips button:nth-child(3){animation-delay:.12s}
+.ap-chips button:hover{color:var(--accent);border-color:rgba(10,109,216,.4);background:rgba(10,109,216,.06);
+  transform:translateY(-1px)}
+.ap-form input:focus{box-shadow:0 0 0 3px rgba(10,109,216,.1)}
+@media(prefers-reduced-motion:reduce){.px-say,.ap-on,.ap-chips button{animation:none!important}}
