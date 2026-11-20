@@ -536,7 +536,7 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 .modal-backdrop{position:fixed;inset:0;z-index:90;background:rgba(11,12,18,.4);backdrop-filter:blur(3px);
   display:flex;align-items:flex-start;justify-content:center;padding:7vh 16px 16px;overflow-y:auto}
 .modal-backdrop[hidden]{display:none}
-.modal{background:rgba(22,24,40,.82);backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);border:1px solid rgba(14,17,22,.10);border-radius:18px;width:min(540px,100%);padding:24px;box-shadow:0 30px 80px rgba(11,12,18,.3);
+.modal{background:rgba(255,255,255,.97);backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);border:1px solid rgba(14,17,22,.10);border-radius:18px;width:min(540px,100%);padding:24px;box-shadow:0 30px 80px rgba(11,12,18,.22);
   animation:modalIn .22s var(--ease-out) both}
 @keyframes modalIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
 .modal h3{font-size:17px;margin-bottom:14px}
@@ -1161,3 +1161,61 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
   transform:translateY(-1px)}
 .ap-form input:focus{box-shadow:0 0 0 3px rgba(10,109,216,.1)}
 @media(prefers-reduced-motion:reduce){.px-say,.ap-on,.ap-chips button{animation:none!important}}
+
+/* ======================= the everything-moves pass ======================= */
+/* every page arrives, it doesn't just appear */
+.view>*{animation:pageIn .4s var(--ease-out) both}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* rows and cards cascade in */
+.rowlist>.lrow,.grid>*{animation:rowIn .45s var(--ease-out) both}
+.rowlist>.lrow:nth-child(2),.grid>*:nth-child(2){animation-delay:.05s}
+.rowlist>.lrow:nth-child(3),.grid>*:nth-child(3){animation-delay:.1s}
+.rowlist>.lrow:nth-child(4),.grid>*:nth-child(4){animation-delay:.15s}
+.rowlist>.lrow:nth-child(5),.grid>*:nth-child(5){animation-delay:.2s}
+.rowlist>.lrow:nth-child(6),.grid>*:nth-child(6){animation-delay:.25s}
+.rowlist>.lrow:nth-child(n+7),.grid>*:nth-child(n+7){animation-delay:.3s}
+@keyframes rowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* sidebar wakes up once */
+.side-nav>*{animation:navIn2 .4s var(--ease-out) both}
+.side-nav>*:nth-child(2){animation-delay:.03s}.side-nav>*:nth-child(3){animation-delay:.06s}
+.side-nav>*:nth-child(4){animation-delay:.09s}.side-nav>*:nth-child(5){animation-delay:.12s}
+.side-nav>*:nth-child(6){animation-delay:.15s}.side-nav>*:nth-child(7){animation-delay:.18s}
+.side-nav>*:nth-child(8){animation-delay:.21s}.side-nav>*:nth-child(9){animation-delay:.24s}
+.side-nav>*:nth-child(n+10){animation-delay:.27s}
+@keyframes navIn2{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+/* nav icons react */
+.side-link svg{transition:transform .22s var(--ease-out)}
+.side-link:hover svg{transform:scale(1.18) rotate(-5deg)}
+.side-link.active svg{transform:scale(1.1)}
+/* page title crossfades on navigation */
+.page-title.tswap{animation:tswap .32s var(--ease-out)}
+@keyframes tswap{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* buttons feel alive */
+.btn{transition:transform .18s var(--ease-out),box-shadow .2s,filter .2s}
+.btn:hover{transform:translateY(-1.5px);filter:brightness(1.04)}
+.btn:active{transform:scale(.955)}
+.btn.ghost:hover{box-shadow:0 6px 16px rgba(14,17,22,.08)}
+/* stat tiles lift */
+.stat{transition:transform .22s var(--ease-out),box-shadow .25s}
+.stat:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(14,17,22,.08)}
+/* the send plane tilts, eager */
+.cc-compose .send-btn svg,.composer .send-btn svg{transition:transform .22s var(--ease-out)}
+.cc-compose .send-btn:hover svg,.composer .send-btn:hover svg{transform:rotate(-14deg) scale(1.12)}
+.cc-compose .send-btn:active svg{transform:rotate(-30deg) scale(.9)}
+/* toasts leave as politely as they arrive */
+.toast.out{transition:opacity .4s,transform .4s;opacity:0;transform:translateY(10px) scale(.97)}
+/* modal springs */
+.modal{animation:mPop .32s var(--ease-out)}
+@keyframes mPop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+.modal-backdrop{animation:fadeIn .25s ease both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* robot idle quirks */
+.hl-fab.idle-wave .px-arm{animation:botWave .8s ease-in-out}
+.hl-fab.idle-hop .px-bot{animation:botBob 3.4s ease-in-out infinite, botHop .55s var(--ease-out)}
+.hl-fab.idle-look .px-wrap{animation:idleLook 1s ease-in-out}
+@keyframes idleLook{0%,100%{transform:rotate(0)}25%{transform:rotate(-9deg)}65%{transform:rotate(7deg)}}
+@media(prefers-reduced-motion:reduce){
+  .view>*,.rowlist>.lrow,.grid>*,.side-nav>*,.page-title.tswap,.modal,.modal-backdrop,
+  .hl-fab.idle-wave .px-arm,.hl-fab.idle-hop .px-bot,.hl-fab.idle-look .px-wrap{animation:none!important}
+  .btn,.stat,.side-link svg{transition:none!important}
+}

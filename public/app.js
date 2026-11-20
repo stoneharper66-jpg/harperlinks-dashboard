@@ -158,7 +158,8 @@
   HL.toast = function (msg, isErr) {
     var el = HL.el("div", "toast" + (isErr ? " err" : ""), msg);
     HL.$("toastWrap").appendChild(el);
-    setTimeout(function () { el.remove(); }, 3800);
+    setTimeout(function () { el.classList.add("out"); }, 3400);
+    setTimeout(function () { el.remove(); }, 3850);
   };
 
   HL.fmtWhen = function (iso) {
@@ -439,7 +440,11 @@
     document.querySelectorAll(".side-link").forEach(function (a) {
       a.classList.toggle("active", a.dataset.page === id);
     });
-    HL.$("pageTitle").textContent = page.title;
+    var titleEl = HL.$("pageTitle");
+    titleEl.textContent = page.title;
+    titleEl.classList.remove("tswap");
+    void titleEl.offsetWidth;
+    titleEl.classList.add("tswap");
     var view = HL.$("view");
     view.innerHTML = "";
     // skeleton while loading

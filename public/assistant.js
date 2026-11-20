@@ -389,6 +389,28 @@
     }
     fab.addEventListener("pointerup", endDrag);
     fab.addEventListener("pointercancel", endDrag);
+
+    /* idle quirks: every so often, when nobody's bothering him, he waves,
+       hops, has a look around, or mutters a beep. Never while flying,
+       being dragged, mid-chat, or in a hidden tab. */
+    LINES.idle = ["beep.", "need anything?", "still here!", "all quiet. nice."];
+    function quirk() {
+      setTimeout(function () {
+        if (!flight && !drag && !panel.classList.contains("open") && !document.hidden && !calmMotion) {
+          var r = Math.random();
+          var cls = r < 0.45 ? "idle-wave" : r < 0.75 ? "idle-hop" : r < 0.9 ? "idle-look" : null;
+          if (cls) {
+            fab.classList.add(cls);
+            setTimeout(function () { fab.classList.remove(cls); }, 1000);
+          } else {
+            say("idle", true);
+          }
+        }
+        quirk();
+      }, 20000 + Math.random() * 18000);
+    }
+    quirk();
+
     // tab hidden mid-flight: rAF pauses, so land him now rather than resume
     // a stale trajectory whenever the tab comes back
     document.addEventListener("visibilitychange", function () {
