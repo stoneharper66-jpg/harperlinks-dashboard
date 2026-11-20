@@ -105,18 +105,43 @@ function setDisabled(userId, disabled) {
 
 // What the browser is allowed to know about a user — no salt, no hash.
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name, role: u.role, accountId: u.accountId, disabled: !!u.disabled, createdAt: u.createdAt };
+  return {
+    id: u.id, email: u.email, name: u.name, role: u.role, accountId: u.accountId,
+    disabled: !!u.disabled, createdAt: u.createdAt,
+    plan: u.plan || "professional", planStatus: u.planStatus || "trial",
+  };
+}
+
+const PLANS = ["professional", "business", "enterprise"];
+const PLAN_STATUSES = ["trial", "active", "paused", "cancelled"];
+function setPlan(userId, { plan, planStatus }) {
+  const users = getUsers();
+  const u = users.find((x) => x.id === userId);
+  if (!u) throw new Error("No such user.");
+  if (u.role === "admin") throw new Error("Admins don't have subscriptions.");
+  if (plan !== undefined) {
+    if (!PLANS.includes(plan)) throw new Error("Plan must be professional, business or enterprise.");
+    u.plan = plan;
+  }
+  if (planStatus !== undefined) {
+    if (!PLAN_STATUSES.includes(planStatus)) throw new Error("Status must be trial, active, paused or cancelled.");
+    u.planStatus = planStatus;
+  }
+  saveUsers(users);
+  return publicUser(u);
 }
 
 // ---- sessions ---------------------------------------------------------------
 function sign(data) {
   return crypto.createHmac("sha256", secret()).update(data).digest("base64url");
 }
-function makeToken(userId) {
-  const payload = Buffer.from(JSON.stringify({
-    uid: userId,
-    exp: Date.now() + SESSION_HOURS * 3600 * 1000,
-  })).toString("base64url");
+function makeToken(userId, opts = {}) {
+  const hours = opts.hours || SESSION_HOURS;
+  const data = { uid: userId, exp: Date.now() + hours * 3600 * 1000 };
+  // "act" = an admin working inside a customer's account. The admin stays the
+  // authenticated principal; the customer id rides along in the signed token.
+  if (opts.actAs) data.act = opts.actAs;
+  const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 function readToken(token) {
@@ -150,14 +175,30 @@ function clearCookie(req) {
   return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure(req) ? "; Secure" : ""}`;
 }
 
-function userFromRequest(req) {
+// Who is this request? Returns { user, impersonator } — `user` is whose
+// account context applies; `impersonator` is set when a HarperLinks admin is
+// working inside a customer's account. The admin's role is re-checked on
+// every request, so a demoted or disabled admin loses access instantly.
+function contextFromRequest(req) {
   const raw = String(req.headers.cookie || "");
   const m = raw.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
   const data = m && readToken(m[1]);
   if (!data) return null;
-  const u = getUsers().find((x) => x.id === data.uid);
+  const users = getUsers();
+  const u = users.find((x) => x.id === data.uid);
   if (!u || u.disabled) return null;
-  return u;
+  if (data.act && u.role === "admin") {
+    const target = users.find((x) => x.id === data.act);
+    if (target && !target.disabled && target.role !== "admin") {
+      return { user: target, impersonator: u };
+    }
+    // target vanished or got disabled mid-session — fall back to plain admin
+  }
+  return { user: u, impersonator: null };
+}
+function userFromRequest(req) {
+  const ctx = contextFromRequest(req);
+  return ctx ? ctx.user : null;
 }
 
 function login(email, password) {
@@ -172,7 +213,7 @@ function login(email, password) {
 
 module.exports = {
   COOKIE,
-  hasAdmin, createUser, setPassword, setDisabled, publicUser,
+  hasAdmin, createUser, setPassword, setDisabled, setPlan, publicUser,
   getUsers, findByEmail,
-  login, makeToken, cookieFor, clearCookie, userFromRequest,
+  login, makeToken, cookieFor, clearCookie, userFromRequest, contextFromRequest,
 };

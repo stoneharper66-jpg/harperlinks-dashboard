@@ -484,6 +484,23 @@
     // Who's signed in decides what renders — nothing draws until we know.
     HL.api("/api/auth/me").then(function (me) {
       HL.user = me.user;
+
+      // Admin working inside a customer's account: unmissable banner + way out
+      if (me.impersonating) {
+        document.body.classList.add("imp-mode");
+        var bar = HL.el("div", "imp-bar");
+        bar.innerHTML =
+          '<span class="imp-dot"></span><span class="imp-msg">You’re inside <b>' + HL.esc(me.user.name) + "’s</b> account (" +
+          HL.esc(me.user.accountId) + ") — everything you do here is theirs.</span>";
+        var back = HL.el("button", "imp-back", "← Return to HQ");
+        back.addEventListener("click", function () {
+          back.disabled = true;
+          HL.post("/api/auth/return").then(function () { location.href = "/"; });
+        });
+        bar.appendChild(back);
+        document.body.prepend(bar);
+      }
+
       var chip = HL.$("userChip");
       if (chip) {
         chip.textContent = me.user.name + (me.user.role === "admin" ? " · HQ" : "");

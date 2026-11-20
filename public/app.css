@@ -1219,3 +1219,38 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
   .hl-fab.idle-wave .px-arm,.hl-fab.idle-hop .px-bot,.hl-fab.idle-look .px-wrap{animation:none!important}
   .btn,.stat,.side-link svg{transition:none!important}
 }
+
+/* ===================== HQ: accounts, subscriptions, impersonation ===================== */
+.imp-bar{position:fixed;top:0;left:0;right:0;z-index:1200;display:flex;align-items:center;gap:10px;
+  padding:9px 16px;font-size:13.5px;color:#fff;background:linear-gradient(100deg,#0A6DD8,#D81B72);
+  box-shadow:0 4px 18px rgba(14,17,22,.18);animation:impIn .35s cubic-bezier(.2,.9,.3,1.2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:760px){.imp-bar{font-size:12px;padding:8px 10px;gap:8px}}
+@keyframes impIn{from{transform:translateY(-100%)}to{transform:none}}
+.imp-bar b{font-weight:700}
+.imp-dot{width:8px;height:8px;border-radius:50%;background:#fff;flex:none;animation:impPulse 1.6s ease-in-out infinite}
+@keyframes impPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+.imp-back{margin-left:auto;flex:none;border:1.5px solid rgba(255,255,255,.75);background:rgba(255,255,255,.14);
+  color:#fff;font-weight:700;font-size:12.5px;padding:5px 12px;border-radius:999px;cursor:pointer;transition:background .2s}
+.imp-back:hover{background:rgba(255,255,255,.28)}
+.imp-back:disabled{opacity:.6;cursor:default}
+body.imp-mode .os{padding-top:38px}
+
+.plan-pill{margin-left:8px;vertical-align:1px;border:none;cursor:pointer;font-size:10.5px;font-weight:700;
+  letter-spacing:.02em;padding:3px 9px;border-radius:999px;transition:transform .15s,box-shadow .2s}
+.plan-pill:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(14,17,22,.14)}
+.plan-pill.trial{background:rgba(10,109,216,.1);color:#0A6DD8}
+.plan-pill.active{background:rgba(31,164,92,.12);color:#157A43}
+.plan-pill.paused{background:rgba(222,146,24,.14);color:#9A6208}
+.plan-pill.cancelled{background:rgba(214,69,69,.1);color:#B32626}
+
+.ghl-chip{font-size:11px;font-weight:600;padding:1.5px 8px;border-radius:999px}
+.ghl-chip.on{background:rgba(31,164,92,.12);color:#157A43}
+.ghl-chip.off{background:rgba(14,17,22,.06);color:var(--dim,#7A8494)}
+
+.hl-select{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--border,rgba(14,17,22,.12));
+  background:#fff;color:var(--text,#0E1116);font-size:14px;outline:none;cursor:pointer}
+.hl-select:focus{border-color:#0A6DD8;box-shadow:0 0 0 3px rgba(10,109,216,.12)}
+.ghl-chip.warn{background:rgba(222,146,24,.14);color:#9A6208}
+.imp-msg{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.imp-dot{flex:none}

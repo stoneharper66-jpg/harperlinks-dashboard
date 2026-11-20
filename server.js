@@ -93,9 +93,11 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 app.get("/api/auth/me", (req, res) => {
-  const u = auth.userFromRequest(req);
-  if (!u) return res.status(401).json({ error: "Not signed in.", needsSetup: !auth.hasAdmin() });
-  res.json({ user: auth.publicUser(u) });
+  const ctx = auth.contextFromRequest(req);
+  if (!ctx) return res.status(401).json({ error: "Not signed in.", needsSetup: !auth.hasAdmin() });
+  const out = { user: auth.publicUser(ctx.user) };
+  if (ctx.impersonator) out.impersonating = { admin: ctx.impersonator.name };
+  res.json(out);
 });
 
 // ========================= public website endpoints ==========================
@@ -156,10 +158,11 @@ app.get("/site/:accountId", (req, res) => {
 // another customer's folder for the rest of the request.
 
 app.use("/api", (req, res, next) => {
-  const u = auth.userFromRequest(req);
-  if (!u) return res.status(401).json({ error: "Please sign in.", authRequired: true });
-  req.user = u;
-  tenant.run(u.accountId, next);
+  const ctx = auth.contextFromRequest(req);
+  if (!ctx) return res.status(401).json({ error: "Please sign in.", authRequired: true });
+  req.user = ctx.user;
+  req.impersonator = ctx.impersonator;
+  tenant.run(ctx.user.accountId, next);
 });
 
 function adminOnly(req, res, next) {
@@ -182,7 +185,45 @@ app.post("/api/auth/password", (req, res) => {
 // ---- admin: customer accounts ----------------------------------------------
 
 app.get("/api/accounts", adminOnly, (_req, res) => {
-  res.json(auth.getUsers().map(auth.publicUser));
+  // each customer row carries whether their publishing engine is connected —
+  // a yes/no only, never the credentials themselves
+  const users = auth.getUsers().map(auth.publicUser);
+  users.forEach((u) => {
+    if (u.role === "admin") return;
+    try {
+      const s = tenant.run(u.accountId, () => ({
+        configured: ghl.isConfigured(),
+        status: store.getCol("ghl-status", null),
+      }));
+      u.ghlConfigured = s.configured;
+      u.ghlConnected = !!(s.configured && s.status && s.status.connected);
+    } catch { u.ghlConfigured = false; u.ghlConnected = false; }
+  });
+  res.json(users);
+});
+
+// Step into a customer's account: same browser, new signed session that says
+// "admin X acting as customer Y". Capped at 4 hours, audited in the
+// customer's own activity feed, and the admin's role is re-checked on every
+// request while it lasts.
+app.post("/api/accounts/:userId/impersonate", adminOnly, (req, res) => {
+  const target = auth.getUsers().find((x) => x.id === req.params.userId);
+  if (!target) return res.status(404).json({ error: "No such user." });
+  if (target.role === "admin") return res.status(400).json({ error: "You can't impersonate another admin." });
+  if (target.disabled) return res.status(400).json({ error: "That account is disabled — re-enable it first." });
+  tenant.run(target.accountId, () =>
+    store.logActivity("auth", `${req.user.name} (HarperLinks team) signed into this account to help out`)
+  );
+  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(req.user.id, { actAs: target.id, hours: 4 }), req));
+  res.json({ ok: true, user: auth.publicUser(target) });
+});
+
+// Step back out to HQ. Only means anything while impersonating.
+app.post("/api/auth/return", (req, res) => {
+  if (!req.impersonator) return res.status(400).json({ error: "You're not inside a customer account." });
+  store.logActivity("auth", `${req.impersonator.name} (HarperLinks team) signed back out of this account`);
+  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(req.impersonator.id), req));
+  res.json({ ok: true, user: auth.publicUser(req.impersonator) });
 });
 
 app.post("/api/accounts", adminOnly, (req, res) => {
@@ -208,6 +249,9 @@ app.patch("/api/accounts/:userId", adminOnly, (req, res) => {
     const body = req.body || {};
     if (body.password !== undefined) auth.setPassword(req.params.userId, body.password);
     if (body.disabled !== undefined) auth.setDisabled(req.params.userId, body.disabled);
+    if (body.plan !== undefined || body.planStatus !== undefined) {
+      auth.setPlan(req.params.userId, { plan: body.plan, planStatus: body.planStatus });
+    }
     const u = auth.getUsers().find((x) => x.id === req.params.userId);
     if (!u) return res.status(404).json({ error: "No such user." });
     res.json({ ok: true, user: auth.publicUser(u) });
@@ -224,6 +268,9 @@ app.post("/api/accounts/:accountId/ghl", adminOnly, async (req, res) => {
   await tenant.run(id, async () => {
     ghl.saveConfig({ token: (req.body || {}).token, locationId: (req.body || {}).locationId });
     const status = await ghl.health();
+    // remember the verified outcome so account lists can show honest state
+    // ("working" vs "saved but broken") without re-hitting GHL every time
+    store.saveCol("ghl-status", { connected: !!status.connected, reason: status.reason || null, at: new Date().toISOString() });
     store.logActivity("integration", status.connected
       ? "GoHighLevel connected by the HarperLinks team"
       : `GoHighLevel details saved but not working yet — ${status.reason}`);

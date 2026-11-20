@@ -1492,30 +1492,87 @@
           root.appendChild(HL.emptyState("🏁", "No customers yet. When someone pays, create their account here and set them up within 7 days."));
           return root;
         }
+        var PLAN_LABEL = { professional: "Professional · A$249", business: "Business · A$499", enterprise: "Enterprise · A$999" };
+
         customers.forEach(function (u) {
-          var row = HL.el("div", "lrow");
+          var row = HL.el("div", "lrow acct-row");
           row.appendChild(HL.el("div", "mono" + (u.disabled ? "" : " on"), (u.name || "?").charAt(0).toUpperCase()));
           var main = HL.el("div", "lmain");
-          main.appendChild(HL.el("div", "lname", u.name + (u.disabled ? " — disabled" : "")));
-          main.appendChild(HL.el("div", "lsub", u.email + " · account: " + u.accountId));
+
+          var nameLine = HL.el("div", "lname", u.name + (u.disabled ? " — disabled" : ""));
+          // subscription pill: click it to change plan or status
+          var planPill = HL.el("button", "plan-pill " + (u.planStatus || "trial"));
+          planPill.type = "button";
+          planPill.textContent = (PLAN_LABEL[u.plan] || "Professional · A$249") + " · " + (u.planStatus || "trial");
+          planPill.title = "Change plan or subscription status";
+          planPill.addEventListener("click", function () {
+            var body = HL.el("div");
+            function sel(options, value) {
+              var s = document.createElement("select");
+              s.className = "hl-select";
+              options.forEach(function (o) {
+                var op = document.createElement("option");
+                op.value = o; op.textContent = o.charAt(0).toUpperCase() + o.slice(1);
+                if (o === value) op.selected = true;
+                s.appendChild(op);
+              });
+              return s;
+            }
+            var plan = sel(["professional", "business", "enterprise"], u.plan || "professional");
+            var status = sel(["trial", "active", "paused", "cancelled"], u.planStatus || "trial");
+            body.appendChild(HL.field("Plan", plan));
+            body.appendChild(HL.field("Subscription status", status));
+            var hint = HL.el("p", null, "Status is your record of where their payment stands. To actually lock them out, use Disable.");
+            hint.style.cssText = "color:var(--muted);font-size:12.5px;line-height:1.5;margin:4px 0 0";
+            body.appendChild(hint);
+            HL.modal("Subscription — " + u.name, body, function () {
+              return HL.post("/api/accounts/" + u.id, { plan: plan.value, planStatus: status.value }, "PATCH")
+                .then(function () { HL.toast("Subscription updated"); HL.navigate(); });
+            }, "Save");
+          });
+          nameLine.appendChild(planPill);
+          main.appendChild(nameLine);
+
+          var sub = HL.el("div", "lsub", u.email + " · account: " + u.accountId + " · ");
+          var ghlChip = HL.el("span", "ghl-chip " + (u.ghlConnected ? "on" : u.ghlConfigured ? "warn" : "off"),
+            u.ghlConnected ? "publishing connected" : u.ghlConfigured ? "publishing saved — not working" : "publishing not connected");
+          sub.appendChild(ghlChip);
+          main.appendChild(sub);
           row.appendChild(main);
+
           var ctl = HL.el("div", "lctl");
           ctl.style.cssText = "display:flex;gap:7px;flex-wrap:wrap";
 
-          var ghlBtn = HL.el("button", "btn ghost sm", "GoHighLevel");
+          // step straight into their dashboard
+          var asBtn = HL.el("button", "btn sm", "Log in as");
+          asBtn.addEventListener("click", function () {
+            asBtn.disabled = true;
+            HL.post("/api/accounts/" + u.id + "/impersonate")
+              .then(function () { location.href = "/"; })
+              .catch(function (e) { asBtn.disabled = false; HL.toast(e.message || "Couldn't sign in", true); });
+          });
+          ctl.appendChild(asBtn);
+
+          var ghlBtn = HL.el("button", "btn ghost sm", u.ghlConfigured ? "Reconnect" : "Connect");
           ghlBtn.addEventListener("click", function () {
             var body = HL.el("div");
-            var note = HL.el("p", null, "Paste this customer's GHL Private Integration token and location id. Saved into their account only, checked against GHL immediately, never shown again.");
+            var note = HL.el("p", null, "Paste their GHL Private Integration token, then the location — the full URL from the browser bar works, the id is pulled out automatically. Saved into their account only, tested immediately, never shown again.");
             note.style.cssText = "color:var(--muted);font-size:13px;line-height:1.55";
             var tok = HL.input("pit-…");
-            var loc = HL.input("Location id");
+            var loc = HL.input("Location id — or just paste the GHL URL");
+            // paste the whole GHL address bar → location id extracted for you
+            loc.addEventListener("input", function () {
+              var m = loc.value.match(/location\/([A-Za-z0-9]{10,})/);
+              if (m) { loc.value = m[1]; HL.toast("Location id pulled out of the URL"); }
+            });
             body.appendChild(note);
             body.appendChild(HL.field("Private Integration token", tok));
-            body.appendChild(HL.field("Location id", loc));
-            HL.modal("Connect GoHighLevel — " + u.accountId, body, function () {
+            body.appendChild(HL.field("Location", loc));
+            HL.modal("Connect publishing — " + u.accountId, body, function () {
               return HL.post("/api/accounts/" + u.accountId + "/ghl", { token: tok.value, locationId: loc.value })
                 .then(function (out) {
                   HL.toast(out.connected ? "Connected · " + (out.detail || "working") : "Saved, but not working: " + out.detail, !out.connected);
+                  HL.navigate();
                 });
             }, "Save & test");
           });
