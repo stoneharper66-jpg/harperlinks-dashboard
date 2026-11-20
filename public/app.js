@@ -67,6 +67,94 @@
     });
   };
 
+  /* ================= global work tracker =================
+     Any AI run registers here. The sidebar shows a pulsing dot on the page
+     the work belongs to, a floating status pill narrates what's happening,
+     and a popup lands when it finishes — so switching pages never loses
+     sight of running work, and nothing resets. */
+  var JOBS = {};
+  var jobSeq = 0;
+
+  function pillEl() {
+    var p = HL.$("workPill");
+    if (!p) {
+      p = HL.el("div", "work-pill");
+      p.id = "workPill";
+      p.innerHTML = '<span class="wp-spin"></span><span class="wp-text"></span><span class="wp-page"></span>';
+      p.hidden = true;
+      document.body.appendChild(p);
+    }
+    return p;
+  }
+  function navDot(page, on) {
+    var link = document.querySelector('.side-link[data-page="' + page + '"]');
+    if (!link) return;
+    var dot = link.querySelector(".workdot");
+    var busyHere = Object.keys(JOBS).some(function (k) { return JOBS[k].page === page; });
+    if (on || busyHere) {
+      if (!dot) {
+        dot = HL.el("span", "workdot");
+        link.appendChild(dot);
+      }
+    } else if (dot) {
+      dot.remove();
+    }
+  }
+  function refreshPill() {
+    var ids = Object.keys(JOBS);
+    var p = pillEl();
+    if (!ids.length) { p.hidden = true; return; }
+    var j = JOBS[ids[ids.length - 1]];
+    p.hidden = false;
+    p.classList.remove("done");
+    p.querySelector(".wp-text").textContent = j.step || j.label;
+    var pageChip = p.querySelector(".wp-page");
+    var navItem = HL.NAV.filter(function (n) { return n.id === j.page; })[0];
+    pageChip.textContent = navItem ? navItem.label : "";
+    pageChip.onclick = function () { location.hash = "#/" + j.page; };
+    if (ids.length > 1) p.querySelector(".wp-text").textContent += "  (+" + (ids.length - 1) + " more)";
+  }
+
+  HL.jobStart = function (page, label) {
+    var id = "job" + (++jobSeq);
+    JOBS[id] = { page: page, label: label, step: "Working on it…" };
+    navDot(page, true);
+    refreshPill();
+    return id;
+  };
+  HL.jobStep = function (id, step) {
+    if (!JOBS[id]) return;
+    JOBS[id].step = step;
+    refreshPill();
+  };
+  HL.jobDone = function (id, summary, ok) {
+    var j = JOBS[id];
+    if (!j) return;
+    delete JOBS[id];
+    navDot(j.page, false);
+    refreshPill();
+    // the landing popup — brief, celebratory, honest
+    var pop = HL.el("div", "work-done" + (ok === false ? " bad" : ""));
+    pop.innerHTML = (ok === false ? "!" : "✓") + " <span>" + HL.esc(summary || j.label) + "</span>";
+    document.body.appendChild(pop);
+    setTimeout(function () { pop.classList.add("out"); }, 3400);
+    setTimeout(function () { pop.remove(); }, 3900);
+  };
+
+  /* visible AI usage — everyone sees their own meter, admins see main's */
+  HL.refreshBudget = function () {
+    HL.api("/api/budget").then(function (b) {
+      var box = HL.$("usageBox");
+      if (!box) return;
+      var pct = Math.min(100, Math.round((b.spent / Math.max(0.01, b.cap)) * 100));
+      box.hidden = false;
+      box.querySelector(".ub-label").textContent = "AI usage · A$" + b.spent.toFixed(2) + " of A$" + b.cap;
+      var bar = box.querySelector(".ub-fill");
+      bar.style.width = Math.max(2, pct) + "%";
+      bar.className = "ub-fill" + (pct >= 100 ? " over" : pct >= 80 ? " warn" : "");
+    }).catch(function () { /* not signed in yet */ });
+  };
+
   HL.toast = function (msg, isErr) {
     var el = HL.el("div", "toast" + (isErr ? " err" : ""), msg);
     HL.$("toastWrap").appendChild(el);
@@ -435,7 +523,9 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") HL.closeModal(); });
     window.addEventListener("hashchange", HL.navigate);
     HL.refreshHealth();
+    HL.refreshBudget();
     setInterval(HL.refreshHealth, 30000);
+    setInterval(HL.refreshBudget, 45000);
     HL.navigate();
     if (HL.mountAssistant) HL.mountAssistant();
   }

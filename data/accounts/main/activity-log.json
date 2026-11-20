@@ -124,5 +124,11 @@
     "type": "automation",
     "message": "Workflow \"Welcome new leads\": New lead welcomed via automation (lead.created)",
     "refId": null
+  },
+  {
+    "at": "2026-11-20T01:19:27.628Z",
+    "type": "website",
+    "message": "Website draft saved — Premium refresh: Fraunces serif display headlines, deeper near-black palette with gold accent, roomier spacing, refined cards with gradient hover, gold-lettered eyebrows, trust strip",
+    "refId": null
   }
 ]

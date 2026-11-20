@@ -412,6 +412,8 @@
       var think = thinkBlock();
       var settled = false;
       var payload = { sessionId: "fab-" + HL.sessionId, message: text };
+      var startPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
+      var job = HL.jobStart ? HL.jobStart(startPage, text.slice(0, 42)) : null;
 
       function land(out) {
         settled = true;
@@ -419,8 +421,12 @@
         if (out.reply) add("bot", out.reply);
         busy = false;
         input.focus();
-        // work may have changed the page behind us
-        if ((out.actions || []).length) HL.navigate();
+        if (job) HL.jobDone(job, (out.steps || []).length
+          ? "Done — " + text.slice(0, 40) : "Answered", true);
+        // refresh only if the user is still where the work landed —
+        // never yank them off a different page
+        var nowPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0];
+        if ((out.actions || []).length && nowPage === startPage) HL.navigate();
       }
       function fail(msg) {
         settled = true;
@@ -428,11 +434,15 @@
         add("bot", "Sorry — " + msg);
         busy = false;
         input.focus();
+        if (job) HL.jobDone(job, "Couldn't finish: " + text.slice(0, 36), false);
       }
 
       HL.stream("/api/chat/stream", payload, function (ev) {
-        if (ev.phase === "model") think.say("Thinking…");
-        else if (ev.phase === "tool-start") { think.say("Working…"); think.start(ev.tool); }
+        if (ev.phase === "model") { think.say("Thinking…"); if (job) HL.jobStep(job, "Thinking…"); }
+        else if (ev.phase === "tool-start") {
+          think.say("Working…"); think.start(ev.tool);
+          if (job) HL.jobStep(job, ((HL.STEP_LABELS && HL.STEP_LABELS[ev.tool]) || ev.tool.replace(/_/g, " ")) + "…");
+        }
         else if (ev.phase === "step") think.finish(ev.tool, ev.ok);
         else if (ev.phase === "done") land(ev);
         else if (ev.phase === "error") fail(ev.error);

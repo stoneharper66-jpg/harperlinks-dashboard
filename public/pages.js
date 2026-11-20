@@ -723,65 +723,100 @@
         /* ================= scan & publish ================= */
         if (isBuilt) {
           var pubRow = HL.el("div", "wpub");
-          var scanBtn = HL.el("button", "btn ghost", "Run security scan");
+          var scanBtn = HL.el("button", "btn ghost", "Security scan");
           var pubBtn = HL.el("button", "btn", site.hasDraft ? "Publish to the web" : "Published ✓");
           if (!site.hasDraft) pubBtn.disabled = true;
-          var scanBox = HL.el("div", "wscan");
 
-          function renderReport(rep) {
-            scanBox.innerHTML = "";
-            scanBox.classList.add("on");
-            var head = HL.el("div", "wscan-head");
-            var ring = HL.el("span", "wscan-score " + (rep.publishable ? "ok" : "bad"), rep.score + "%");
-            head.appendChild(ring);
-            head.appendChild(HL.el("span", "wscan-verdict",
-              rep.publishable
-                ? (rep.qualFails ? "Safe to publish — " + rep.qualFails + " quality suggestion(s) below" : "Perfect — every check passed")
-                : rep.secFails + " security issue(s) block publishing"));
-            scanBox.appendChild(head);
-            var list = HL.el("div", "wscan-list");
-            ["security", "quality"].forEach(function (kind) {
-              list.appendChild(HL.el("div", "wscan-kind", kind === "security" ? "Security" : "Quality & SEO"));
-              rep.checks.filter(function (c) { return c.kind === kind; }).forEach(function (c, i) {
-                var row = HL.el("div", "wscan-row" + (c.ok ? "" : " fail"));
-                row.style.animationDelay = (i * 0.045) + "s";
-                row.innerHTML = (c.ok ? '<span class="wsc-ok">✓</span>' : '<span class="wsc-bad">✗</span>') +
-                  "<span>" + HL.esc(c.label) + (c.ok ? "" : ' <em>' + HL.esc(c.detail) + "</em>") + "</span>";
-                list.appendChild(row);
-              });
+          // one compact line: sweep animation while scanning, then the verdict
+          var line = HL.el("div", "wscan-line");
+          var details = HL.el("div", "wscan-details");
+          var lastReport = null;
+
+          var SCAN_WORDS = ["Checking scripts…", "Checking links…", "Checking embedded content…", "Checking forms…", "Checking SEO & accessibility…"];
+          function animateScan(fetcher, after) {
+            line.className = "wscan-line running";
+            details.classList.remove("on");
+            line.innerHTML = '<span class="wsl-bar"></span><span class="wsl-text">' + SCAN_WORDS[0] + "</span>";
+            var wi = 0;
+            var cycler = setInterval(function () {
+              wi = (wi + 1) % SCAN_WORDS.length;
+              var t = line.querySelector(".wsl-text");
+              if (t) t.textContent = SCAN_WORDS[wi];
+            }, 420);
+            var t0 = Date.now();
+            fetcher().then(function (rep) {
+              // let the sweep play at least ~1.5s so the scan reads as a scan
+              setTimeout(function () {
+                clearInterval(cycler);
+                showLine(rep);
+                if (after) after(rep, null);
+              }, Math.max(0, 1500 - (Date.now() - t0)));
+            }).catch(function (e) {
+              clearInterval(cycler);
+              line.className = "wscan-line bad";
+              line.textContent = e.message;
+              if (after) after(null, e);
             });
-            scanBox.appendChild(list);
-            return rep;
+          }
+
+          function showLine(rep) {
+            lastReport = rep;
+            var fails = rep.checks.filter(function (c) { return !c.ok; });
+            line.className = "wscan-line " + (rep.publishable ? (rep.qualFails ? "warn" : "ok") : "bad");
+            var msg = rep.publishable
+              ? (rep.qualFails
+                ? "✓ " + rep.score + "% — safe to publish · " + rep.qualFails + " quality tip" + (rep.qualFails > 1 ? "s" : "")
+                : "✓ " + rep.score + "% — perfect, every check passed")
+              : "✗ " + rep.secFails + " security issue" + (rep.secFails > 1 ? "s" : "") + " block publishing";
+            line.innerHTML = '<span class="wsl-text">' + HL.esc(msg) + "</span>" +
+              '<span class="wsl-free">scans are free</span>';
+            if (fails.length) {
+              var fix = HL.el("button", "btn sm wsl-fix", "Fix with AI");
+              fix.addEventListener("click", function () {
+                askAI("The security scan found these problems — fix every one of them in the website draft: " +
+                  fails.map(function (c) { return c.label + " (" + (c.detail || "fix this") + ")"; }).join("; "));
+              });
+              line.appendChild(fix);
+              var tog = HL.el("button", "wsl-more", "details");
+              tog.addEventListener("click", function () { details.classList.toggle("on"); });
+              line.appendChild(tog);
+              details.innerHTML = "";
+              fails.forEach(function (c) {
+                var r = HL.el("div", "wscan-row fail");
+                r.innerHTML = '<span class="wsc-bad">✗</span><span>' + HL.esc(c.label) + " <em>" + HL.esc(c.detail) + "</em></span>";
+                details.appendChild(r);
+              });
+            }
           }
 
           scanBtn.addEventListener("click", function () {
-            scanBtn.disabled = true; scanBtn.textContent = "Scanning…";
-            HL.api("/api/website/scan")
-              .then(renderReport)
-              .catch(function (e) { HL.toast(e.message, true); })
-              .then(function () { scanBtn.disabled = false; scanBtn.textContent = "Run security scan"; });
+            scanBtn.disabled = true;
+            animateScan(function () { return HL.api("/api/website/scan"); }, function () { scanBtn.disabled = false; });
           });
 
           pubBtn.addEventListener("click", function () {
             pubBtn.disabled = true; pubBtn.textContent = "Scanning & publishing…";
-            HL.post("/api/website/publish", {})
-              .then(function (out) {
-                if (out.report) renderReport(out.report);
-                stage.classList.add("landed");
-                HL.toast("Published — your page is live ✓");
-                setTimeout(function () { HL.navigate(); }, 1600);
-              })
-              .catch(function (e) {
-                HL.toast(e.message, true);
+            var job = HL.jobStart ? HL.jobStart("website", "Publishing your website") : null;
+            animateScan(function () {
+              return HL.post("/api/website/publish", {}).then(function (out) { return out.report; });
+            }, function (rep, err) {
+              if (err) {
+                if (job) HL.jobDone(job, "Publish blocked — fix the security issues", false);
                 pubBtn.disabled = false; pubBtn.textContent = "Publish to the web";
-                HL.api("/api/website/scan").then(renderReport).catch(function () {});
-              });
+                HL.api("/api/website/scan").then(showLine).catch(function () {});
+                return;
+              }
+              if (job) HL.jobDone(job, "Website published — it's live", true);
+              stage.classList.add("landed");
+              setTimeout(function () { HL.navigate(); }, 1500);
+            });
           });
 
           pubRow.appendChild(scanBtn);
           pubRow.appendChild(pubBtn);
           root.appendChild(pubRow);
-          root.appendChild(scanBox);
+          root.appendChild(line);
+          root.appendChild(details);
         }
 
         /* ================= ask-for-a-change bar ================= */
@@ -828,6 +863,7 @@
           thinkRow.appendChild(steps);
 
           var waiting = {}, done = 0, settled = false;
+          var job = HL.jobStart ? HL.jobStart("website", text.slice(0, 42)) : null;
           function label(t) { return (HL.STEP_LABELS && HL.STEP_LABELS[t]) || t.replace(/_/g, " "); }
           function finish(msg, ok) {
             settled = true;
@@ -837,11 +873,12 @@
             thinkRow.appendChild(m);
             busy = false;
             askBtn.disabled = false;
+            if (job) HL.jobDone(job, ok ? (done ? "Website updated — " + text.slice(0, 36) : "Answered") : "Couldn't finish: " + text.slice(0, 30), ok);
             if (ok && done) {
-              // the work really happened — show it, then re-render with it
               stage.classList.add("landed");
               reloadFrame();
-              setTimeout(function () { HL.navigate(); }, 1800);
+              var nowPage = (location.hash || "").replace(/^#\//, "").split("?")[0];
+              if (nowPage === "website") setTimeout(function () { HL.navigate(); }, 1800);
             }
           }
 
@@ -854,6 +891,7 @@
             if (ev.phase === "model") head2.querySelector(".wt-label").textContent = "Thinking…";
             else if (ev.phase === "tool-start") {
               head2.querySelector(".wt-label").textContent = "Working…";
+              if (job) HL.jobStep(job, label(ev.tool) + "…");
               var r = HL.el("div", "wt-step pending");
               r.innerHTML = '<span class="wt-spin"></span><span>' + HL.esc(label(ev.tool)) + "</span>";
               steps.appendChild(r);

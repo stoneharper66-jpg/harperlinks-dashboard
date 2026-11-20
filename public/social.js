@@ -249,6 +249,8 @@
       var payload = { sessionId: HL.sessionId, message: text.trim(), employee: opts.employee || undefined };
       var live = startLiveThinking();
       var settled = false;
+      var startPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
+      var job = HL.jobStart ? HL.jobStart(startPage, text.trim().slice(0, 42)) : null;
 
       function release() { sending = false; input.focus(); }
       function land(out) {
@@ -258,6 +260,9 @@
         if (out.reply) addMsg("bot", out.reply);
         benchStatus(false);
         release();
+        if (job) HL.jobDone(job, (out.steps || []).length
+          ? "Done — " + out.steps.length + " step" + (out.steps.length > 1 ? "s" : "") + ": " + text.trim().slice(0, 36)
+          : "Answered: " + text.trim().slice(0, 40), true);
         if (opts.onWorkDone) opts.onWorkDone(out);
       }
       function fail(msg) {
@@ -266,11 +271,15 @@
         benchStatus(false);
         addMsg("bot", "Sorry — " + msg);
         release();
+        if (job) HL.jobDone(job, "Couldn't finish: " + text.trim().slice(0, 36), false);
       }
 
       HL.stream("/api/chat/stream", payload, function (ev) {
-        if (ev.phase === "model") live.head("Thinking…");
-        else if (ev.phase === "tool-start") { live.head("Working…"); live.toolStart(ev.tool); }
+        if (ev.phase === "model") { live.head("Thinking…"); if (job) HL.jobStep(job, "Thinking…"); }
+        else if (ev.phase === "tool-start") {
+          live.head("Working…"); live.toolStart(ev.tool);
+          if (job) HL.jobStep(job, (HL.STEP_LABELS[ev.tool] || ev.tool.replace(/_/g, " ")) + "…");
+        }
         else if (ev.phase === "step") live.stepDone(ev.tool, ev.ok);
         else if (ev.phase === "done") land(ev);
         else if (ev.phase === "error") fail(ev.error);
