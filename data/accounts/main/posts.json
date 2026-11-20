@@ -70,12 +70,14 @@
       "fullscreen"
     ],
     "isVideo": false,
-    "status": "scheduled",
+    "status": "failed",
     "scheduledAt": "2026-11-19T04:00:00.000Z",
     "createdAt": "2026-11-18T04:21:02.752Z",
     "publishedAt": null,
     "simulated": true,
-    "createdBy": "chat"
+    "createdBy": "chat",
+    "failedAt": "2026-11-20T00:47:25.390Z",
+    "failureReason": "No instagram account connected in GHL's Social Planner. Connect one there and it'll publish next time."
   },
   {
     "id": "post_mwlm5xgh5",

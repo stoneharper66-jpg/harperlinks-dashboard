@@ -135,11 +135,28 @@
       if (!benchLabel) return;
       benchLabel.classList.toggle("working", !!working);
       benchLabel.querySelector(".btext").textContent = text || (working ? "Building…" : "Live build");
+      // while it's working and nothing has landed yet, show a shimmering
+      // placeholder so the build area visibly "warms up" instead of sitting dead
+      if (benchBody) {
+        var hasItems = !!benchBody.querySelector(".bench-item");
+        var skel = benchBody.querySelector(".bench-skel");
+        if (working && !hasItems && !skel) {
+          var emptyMsg = benchBody.querySelector(".bench-empty");
+          if (emptyMsg) emptyMsg.remove();
+          skel = HL.el("div", "bench-skel");
+          skel.innerHTML = "<i></i><i></i><i></i>";
+          benchBody.appendChild(skel);
+        } else if ((!working || hasItems) && skel) {
+          skel.remove();
+        }
+      }
     }
     function benchItem(action) {
       if (!benchBody) return;
       var empty = benchBody.querySelector(".bench-empty");
       if (empty) empty.remove();
+      var skel = benchBody.querySelector(".bench-skel");
+      if (skel) skel.remove();
       var rec = action.record;
       var kind = "", body = "", meta = [];
       if (action.type === "post" && rec) {
@@ -285,21 +302,29 @@
 
     var form = HL.el("form", opts.bare ? "cc-compose" : "composer");
     var input = document.createElement("input");
-    input.placeholder = opts.placeholder || "Tell your AI team what to do…";
-    input.setAttribute("aria-label", input.placeholder);
-    // bare mode: gently cycle the placeholder while the field is empty
+    input.setAttribute("aria-label", opts.placeholder || "Tell your AI team what to do…");
+    // bare mode: suggestions live on their own hint layer and crossfade
+    // cleanly. The old approach dimmed the INPUT itself to swap the
+    // placeholder attribute — caret and all — which looked broken mid-fade.
     if (opts.bare && Array.isArray(opts.placeholders) && opts.placeholders.length) {
+      var hint = HL.el("span", "ph-hint", opts.placeholders[0]);
+      form.appendChild(hint);
       var phI = 0;
+      function syncHint() { hint.classList.toggle("hidden", !!input.value); }
+      input.addEventListener("input", syncHint);
       setInterval(function () {
         if (document.activeElement === input || input.value) return;
-        phI = (phI + 1) % opts.placeholders.length;
-        input.style.transition = "opacity .35s";
-        input.style.opacity = "0.35";
+        hint.classList.add("out");
         setTimeout(function () {
-          input.placeholder = opts.placeholders[phI];
-          input.style.opacity = "1";
-        }, 350);
+          phI = (phI + 1) % opts.placeholders.length;
+          hint.textContent = opts.placeholders[phI];
+          hint.classList.remove("out");
+          hint.classList.add("in");
+          setTimeout(function () { hint.classList.remove("in"); }, 420);
+        }, 380);
       }, 3800);
+    } else {
+      input.placeholder = opts.placeholder || "Tell your AI team what to do…";
     }
     var btn = HL.el("button", "send-btn");
     btn.type = "submit";

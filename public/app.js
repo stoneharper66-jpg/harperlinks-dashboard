@@ -273,27 +273,27 @@
     billing: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/></svg>',
   };
 
+  /* Three plain groups. Pages that still need an integration live in a
+     collapsed "Coming soon" drawer so the everyday sidebar stays short. */
   HL.NAV = [
-    { sep: "Run the business" },
-    { id: "overview", label: "Command Centre", icon: IC.overview },
-    { id: "employees", label: "AI Employees", icon: IC.employees },
+    { id: "overview", label: "Home", icon: IC.overview },
+    { id: "employees", label: "AI Team", icon: IC.employees },
     { id: "automations", label: "Automations", icon: IC.automations },
-    { sep: "Channels" },
-    { id: "social", label: "Social Media", icon: IC.social },
-    { id: "inbox", label: "Unified Inbox", icon: IC.inbox, badge: "setup" },
-    { id: "phone", label: "AI Phone System", icon: IC.phone, badge: "setup" },
-    { id: "email", label: "Email & SMS", icon: IC.email, badge: "setup" },
-    { sep: "Customers" },
-    { id: "crm", label: "CRM & Leads", icon: IC.crm },
+    { sep: "Your business" },
+    { id: "social", label: "Social", icon: IC.social },
+    { id: "website", label: "Website", icon: IC.website },
+    { id: "crm", label: "Customers", icon: IC.crm },
     { id: "appointments", label: "Appointments", icon: IC.appointments },
-    { sep: "Grow" },
-    { id: "website", label: "Website Manager", icon: IC.website },
     { id: "analytics", label: "Analytics", icon: IC.analytics },
-    { sep: "Workspace" },
-    { id: "integrations", label: "Integrations", icon: IC.integrations },
-    { id: "team", label: "Team", icon: IC.team },
-    { id: "settings", label: "Settings & Knowledge", icon: IC.settings },
+    { sep: "Account" },
+    { id: "integrations", label: "Connections", icon: IC.integrations },
+    { id: "team", label: "My Team", icon: IC.team },
+    { id: "settings", label: "Settings", icon: IC.settings },
     { id: "billing", label: "Billing", icon: IC.billing },
+    { sep: "Coming soon", soon: true },
+    { id: "inbox", label: "Unified Inbox", icon: IC.inbox, badge: "setup", soon: true },
+    { id: "phone", label: "AI Phone", icon: IC.phone, badge: "setup", soon: true },
+    { id: "email", label: "Email & SMS", icon: IC.email, badge: "setup", soon: true },
     { sep: "HarperLinks HQ", admin: true },
     { id: "accounts", label: "Customer Accounts", icon: IC.team, admin: true },
   ];
@@ -302,17 +302,43 @@
     var nav = HL.$("sideNav");
     nav.innerHTML = "";
     var isAdmin = HL.user && HL.user.role === "admin";
+    var soonOpen = false;
+    try { soonOpen = localStorage.getItem("hl-nav-soon") === "1"; } catch (e) { /* ignore */ }
+    var soonWrap = null;
+
     HL.NAV.forEach(function (item) {
       if (item.admin && !isAdmin) return; // customers never see HQ pages
+
+      if (item.sep && item.soon) {
+        // the "Coming soon" drawer: a toggle plus a collapsible container
+        var tog = HL.el("button", "side-sep side-soon" + (soonOpen ? " open" : ""));
+        tog.type = "button";
+        tog.innerHTML = item.sep + ' <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
+        soonWrap = HL.el("div", "soon-wrap" + (soonOpen ? " open" : ""));
+        // bind THIS wrap element — the shared `soonWrap` variable gets reset
+        // by the next section header, which would null out the handler
+        var thisWrap = soonWrap;
+        tog.addEventListener("click", function () {
+          var open = !thisWrap.classList.contains("open");
+          thisWrap.classList.toggle("open", open);
+          tog.classList.toggle("open", open);
+          try { localStorage.setItem("hl-nav-soon", open ? "1" : "0"); } catch (e) { /* ignore */ }
+        });
+        nav.appendChild(tog);
+        nav.appendChild(soonWrap);
+        return;
+      }
       if (item.sep) {
+        soonWrap = null;
         nav.appendChild(HL.el("div", "side-sep", item.sep));
         return;
       }
+
       var a = HL.el("a", "side-link");
       a.href = "#/" + item.id;
       a.dataset.page = item.id;
       a.innerHTML = item.icon + "<span>" + item.label + "</span>" + (item.badge ? '<span class="nbadge">' + item.badge + "</span>" : "");
-      nav.appendChild(a);
+      (item.soon && soonWrap ? soonWrap : nav).appendChild(a);
     });
   }
 

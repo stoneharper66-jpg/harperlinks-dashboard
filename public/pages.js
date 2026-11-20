@@ -104,14 +104,17 @@
 
         // the team, linked — glowing when active; click to talk to that bot
         var strip = HL.el("div", "cc-team");
-        emps.forEach(function (e) {
+        emps.forEach(function (e, ei) {
           var cell = HL.el("div", "cc-team-cell");
+          cell.style.animationDelay = (0.06 * ei) + "s";
           var b = HL.el("button", "cc-team-m" + (e.enabled ? " on" : "") + (emp === e.id ? " sel" : ""));
           b.title = e.name + " — " + e.role + (e.enabled ? "" : " (off)");
-          b.textContent = e.name.charAt(0);
+          b.innerHTML = '<span class="tm-ring"></span><span class="tm-init">' + HL.esc(e.name.charAt(0)) + "</span>";
           b.addEventListener("click", function () { location.hash = "#/overview?emp=" + e.id; });
           cell.appendChild(b);
-          cell.appendChild(HL.el("span", "tm-name", e.name));
+          var who = HL.el("span", "tm-name", e.name);
+          cell.appendChild(who);
+          cell.appendChild(HL.el("span", "tm-role", e.role));
           strip.appendChild(cell);
         });
         var stripWrap = HL.el("div", "cc-teamwrap");
