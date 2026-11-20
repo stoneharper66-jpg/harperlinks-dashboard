@@ -14,8 +14,9 @@
       var(--bg, #F6F8FC)}
   .gate-card{width:min(420px,100%);background:var(--panel,#FFFFFF);border:1px solid var(--border,rgba(14,17,22,.1));
     border-radius:20px;padding:34px 30px;box-shadow:0 18px 50px rgba(14,17,22,.10)}
-  .gate-brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
+  .gate-brand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:6px}
   .gate-brand .logo-word{font-size:21px}
+  .gate-brand .logo-glossy{width:66px;height:44px;object-fit:contain;filter:drop-shadow(0 4px 12px rgba(120,60,200,.25))}
   .gate-sub{text-align:center;color:var(--muted,#55606E);font-size:13.5px;margin:0 0 26px}
   .gate-field{margin-bottom:14px}
   .gate-field label{display:block;font-size:12px;color:var(--muted,#55606E);margin-bottom:6px;font-weight:600}
@@ -41,11 +42,7 @@
 <div class="gate">
   <form class="gate-card" id="form" autocomplete="on">
     <div class="gate-brand">
-      <svg class="logo-mark" viewBox="0 0 36 36" fill="none" width="30" height="30" aria-hidden="true">
-        <path d="M15 21l6-6" stroke="url(#gradStroke)" stroke-width="2.6" stroke-linecap="round"/>
-        <path d="M13 23l-2.5 2.5a5 5 0 01-7-7L8 14a5 5 0 017 0" stroke="#0A84FF" stroke-width="2.6" stroke-linecap="round" fill="none"/>
-        <path d="M23 13l2.5-2.5a5 5 0 017 7L28 22a5 5 0 01-7 0" stroke="#FF2D92" stroke-width="2.6" stroke-linecap="round" fill="none"/>
-      </svg>
+      <img class="logo-glossy" src="/assets/logo-alpha.png" alt="" aria-hidden="true" width="66" height="44" />
       <span class="logo-word">Harper<b>Links</b></span>
     </div>
     <p class="gate-sub" id="sub">Sign in to your dashboard</p>

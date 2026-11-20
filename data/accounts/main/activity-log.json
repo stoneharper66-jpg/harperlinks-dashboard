@@ -148,5 +148,11 @@
     "type": "failed",
     "message": "Couldn't publish tiktok post — No tiktok account connected in GHL's Social Planner. Connect one there and it'll publish next time.",
     "refId": "post_mwlm5xgh5"
+  },
+  {
+    "at": "2026-11-20T03:42:36.397Z",
+    "type": "website",
+    "message": "Website restored to an earlier version (first draft — bold creator-focused one-pager)",
+    "refId": null
   }
 ]
