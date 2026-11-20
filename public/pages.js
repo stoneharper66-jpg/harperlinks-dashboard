@@ -591,18 +591,22 @@
       return Promise.all([HL.api("/api/website"), HL.api("/api/profile")]).then(function (res) {
         var site = res[0], profile = res[1];
         var root = HL.el("div", "wsite");
-        var isBuilt = site.mode === "built" && site.publicPath;
+        var isBuilt = site.mode === "built" && (site.hasDraft || site.published);
         var isExternal = site.mode === "external" && site.externalUrl;
 
         /* ================= header: what this is, and its state ================= */
         var head = HL.el("div", "whead");
         var hl = HL.el("div", "whead-l");
         hl.appendChild(HL.el("h2", "whead-title", isBuilt ? (site.title || "Your website") : isExternal ? "Your website" : "Your website"));
-        var statusText = isBuilt ? "Built by your AI team · updated " + HL.fmtWhen(site.updatedAt)
+        var statusText = isBuilt
+          ? (site.hasDraft ? "Draft — not live yet" : "Live · published " + HL.fmtWhen(site.publishedAt))
           : isExternal ? "Linked — hosted elsewhere"
           : "Not set up yet";
-        var chip = HL.el("span", "wchip " + (isBuilt ? "live" : isExternal ? "ext" : "none"), statusText);
+        var chip = HL.el("span", "wchip " + (isBuilt ? (site.hasDraft ? "draft" : "live") : isExternal ? "ext" : "none"), statusText);
         hl.appendChild(chip);
+        if (isBuilt && site.hasDraft && site.published) {
+          hl.appendChild(HL.el("span", "wchip live", "Previous version still live"));
+        }
         head.appendChild(hl);
 
         /* device switcher — only meaningful when there's something to preview */
@@ -671,18 +675,23 @@
         var IC_OPEN = '<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>';
 
         if (isBuilt) {
-          addr.textContent = location.origin + site.publicPath;
+          var previewSrc = site.hasDraft ? "/api/website/draft" : site.publicPath;
+          addr.textContent = site.hasDraft ? "draft preview — only you can see this" : location.origin + site.publicPath;
           frame = document.createElement("iframe");
           frame.className = "wframe";
-          frame.src = site.publicPath + "?t=" + Date.now();
-          frame.title = "Live preview of your website";
+          frame.src = previewSrc + "?t=" + Date.now();
+          frame.title = site.hasDraft ? "Draft preview of your website" : "Live preview of your website";
           viewport.appendChild(frame);
           shimmer();
-          barActions.appendChild(iconBtn("Refresh preview", IC_REFRESH, reloadFrame));
-          var openA = HL.el("a", "wact");
-          openA.href = site.publicPath; openA.target = "_blank"; openA.rel = "noopener";
-          openA.title = "Open in a new tab"; openA.innerHTML = IC_OPEN;
-          barActions.appendChild(openA);
+          barActions.appendChild(iconBtn("Refresh preview", IC_REFRESH, function () {
+            shimmer(); frame.src = previewSrc + "?t=" + Date.now();
+          }));
+          if (site.published && site.publicPath) {
+            var openA = HL.el("a", "wact");
+            openA.href = site.publicPath; openA.target = "_blank"; openA.rel = "noopener";
+            openA.title = "Open the live page"; openA.innerHTML = IC_OPEN;
+            barActions.appendChild(openA);
+          }
         } else if (isExternal) {
           addr.textContent = site.externalUrl;
           frame = document.createElement("iframe");
@@ -710,6 +719,70 @@
           viewport.appendChild(empty);
         }
         root.appendChild(stage);
+
+        /* ================= scan & publish ================= */
+        if (isBuilt) {
+          var pubRow = HL.el("div", "wpub");
+          var scanBtn = HL.el("button", "btn ghost", "Run security scan");
+          var pubBtn = HL.el("button", "btn", site.hasDraft ? "Publish to the web" : "Published ✓");
+          if (!site.hasDraft) pubBtn.disabled = true;
+          var scanBox = HL.el("div", "wscan");
+
+          function renderReport(rep) {
+            scanBox.innerHTML = "";
+            scanBox.classList.add("on");
+            var head = HL.el("div", "wscan-head");
+            var ring = HL.el("span", "wscan-score " + (rep.publishable ? "ok" : "bad"), rep.score + "%");
+            head.appendChild(ring);
+            head.appendChild(HL.el("span", "wscan-verdict",
+              rep.publishable
+                ? (rep.qualFails ? "Safe to publish — " + rep.qualFails + " quality suggestion(s) below" : "Perfect — every check passed")
+                : rep.secFails + " security issue(s) block publishing"));
+            scanBox.appendChild(head);
+            var list = HL.el("div", "wscan-list");
+            ["security", "quality"].forEach(function (kind) {
+              list.appendChild(HL.el("div", "wscan-kind", kind === "security" ? "Security" : "Quality & SEO"));
+              rep.checks.filter(function (c) { return c.kind === kind; }).forEach(function (c, i) {
+                var row = HL.el("div", "wscan-row" + (c.ok ? "" : " fail"));
+                row.style.animationDelay = (i * 0.045) + "s";
+                row.innerHTML = (c.ok ? '<span class="wsc-ok">✓</span>' : '<span class="wsc-bad">✗</span>') +
+                  "<span>" + HL.esc(c.label) + (c.ok ? "" : ' <em>' + HL.esc(c.detail) + "</em>") + "</span>";
+                list.appendChild(row);
+              });
+            });
+            scanBox.appendChild(list);
+            return rep;
+          }
+
+          scanBtn.addEventListener("click", function () {
+            scanBtn.disabled = true; scanBtn.textContent = "Scanning…";
+            HL.api("/api/website/scan")
+              .then(renderReport)
+              .catch(function (e) { HL.toast(e.message, true); })
+              .then(function () { scanBtn.disabled = false; scanBtn.textContent = "Run security scan"; });
+          });
+
+          pubBtn.addEventListener("click", function () {
+            pubBtn.disabled = true; pubBtn.textContent = "Scanning & publishing…";
+            HL.post("/api/website/publish", {})
+              .then(function (out) {
+                if (out.report) renderReport(out.report);
+                stage.classList.add("landed");
+                HL.toast("Published — your page is live ✓");
+                setTimeout(function () { HL.navigate(); }, 1600);
+              })
+              .catch(function (e) {
+                HL.toast(e.message, true);
+                pubBtn.disabled = false; pubBtn.textContent = "Publish to the web";
+                HL.api("/api/website/scan").then(renderReport).catch(function () {});
+              });
+          });
+
+          pubRow.appendChild(scanBtn);
+          pubRow.appendChild(pubBtn);
+          root.appendChild(pubRow);
+          root.appendChild(scanBox);
+        }
 
         /* ================= ask-for-a-change bar ================= */
         var askWrap = HL.el("div", "wask");

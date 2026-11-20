@@ -374,7 +374,8 @@
       var today = new Date();
       for (var i = 0; i < startOffset; i++) grid.appendChild(HL.el("div", "bigcal-day dim"));
       for (var d = 1; d <= days; d++) {
-        var cell = HL.el("div", "bigcal-day");
+        var dow = new Date(y, m, d).getDay();
+        var cell = HL.el("div", "bigcal-day" + (dow === 0 || dow === 6 ? " wknd" : ""));
         if (d === today.getDate() && m === today.getMonth() && y === today.getFullYear()) cell.classList.add("today");
         cell.appendChild(HL.el("div", "dnum", String(d)));
         var dayPosts = postsCache.filter(function (p) {
@@ -383,13 +384,14 @@
           var pd = new Date(t);
           return pd.getFullYear() === y && pd.getMonth() === m && pd.getDate() === d;
         });
+        if (dayPosts.length) cell.classList.add("has");
         dayPosts.slice(0, 3).forEach(function (p) {
-          var ev = HL.el("div", "bigcal-ev" + (p.status === "published" ? " grey" : p.platform === "tiktok" ? " pink" : ""));
-          ev.textContent = (p.isVideo ? "video · " : "") + p.platform + ": " + p.content.slice(0, 24);
-          ev.title = p.content;
+          var ev = HL.el("div", "bigcal-ev plat-" + p.platform + (p.status === "published" ? " done" : ""));
+          ev.innerHTML = '<i class="ev-dot"></i><span>' + HL.esc((p.isVideo ? "🎬 " : "") + p.content.slice(0, 26)) + "</span>";
+          ev.title = p.platform + " · " + p.status + " — " + p.content;
           cell.appendChild(ev);
         });
-        if (dayPosts.length > 3) cell.appendChild(HL.el("div", "bigcal-ev grey", "+" + (dayPosts.length - 3) + " more"));
+        if (dayPosts.length > 3) cell.appendChild(HL.el("div", "bigcal-more", "+" + (dayPosts.length - 3) + " more"));
         grid.appendChild(cell);
       }
       body.appendChild(grid);

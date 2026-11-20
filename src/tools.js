@@ -272,6 +272,12 @@ const toolSchemas = [
     },
   },
   {
+    name: "publish_website",
+    description:
+      "Publish the draft website to its public address. This runs the full security scan first and REFUSES if any security check fails — report the failures honestly and fix them with edit_website before trying again.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "get_website_html",
     description: "Read the current HTML of the site you built, so you can edit it precisely.",
     input_schema: { type: "object", properties: {} },
@@ -400,6 +406,27 @@ function makeHandlers(base = dt.now()) {
       return { ok: true, content: "No website yet. Offer to build one — you write the whole page." };
     },
 
+    publish_website() {
+      const website = require("./website");
+      try {
+        const out = website.publish();
+        const r = out.report;
+        return {
+          ok: true,
+          content: `Published — the page passed all ${r.checks.length - r.qualFails} blocking checks (overall score ${r.score}%).` +
+            (r.qualFails ? ` ${r.qualFails} quality suggestion(s) remain: ` + r.checks.filter(c => !c.ok).map(c => c.label).join("; ") : " Every check passed."),
+          action: { type: "website", record: { published: true } },
+        };
+      } catch (e) {
+        let detail = "";
+        try {
+          const rep = website.scan();
+          detail = rep.checks.filter(c => c.kind === "security" && !c.ok).map(c => `${c.label}: ${c.detail}`).join(" | ");
+        } catch (_) { /* no draft */ }
+        return { ok: false, content: `Couldn't publish — ${e.message}${detail ? " Details: " + detail : ""}` };
+      }
+    },
+
     get_website_html() {
       const website = require("./website");
       const w = website.get();
@@ -413,7 +440,7 @@ function makeHandlers(base = dt.now()) {
         const out = website.saveHtml(input.html, { title: input.title, note: input.note || "first draft" });
         return {
           ok: true,
-          content: `Published the site "${input.title}". It's live on the Website page — the preview updates straight away.`,
+          content: `Saved "${input.title}" as a draft. The preview on the Website page shows it now; it is NOT live yet — run publish_website (it security-scans first), or the owner can hit Publish on the Website page.`,
           action: { type: "website", record: { title: out.title, updatedAt: out.updatedAt, note: input.note || "first draft" } },
         };
       } catch (e) {
@@ -431,7 +458,7 @@ function makeHandlers(base = dt.now()) {
         const out = website.saveHtml(input.html, { title: current.title, note: input.note });
         return {
           ok: true,
-          content: `Updated the site — ${input.note}. The previous version is saved if they want it back.`,
+          content: `Saved the edit as a draft — ${input.note}. The Website page preview shows it; publish_website makes it live after the security scan passes.`,
           action: { type: "website", record: { title: out.title, updatedAt: out.updatedAt, note: input.note } },
         };
       } catch (e) {

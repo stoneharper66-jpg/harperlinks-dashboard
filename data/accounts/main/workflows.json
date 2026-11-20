@@ -46,5 +46,49 @@
       }
     ],
     "createdAt": "2026-11-18T07:54:23.891Z"
+  },
+  {
+    "id": "wf_mwoa1j161",
+    "name": "Welcome new leads",
+    "trigger": "lead.created",
+    "actions": [
+      {
+        "type": "draft_reply",
+        "note": "Warm welcome message introducing Larpify and asking what they're creating (skits, tutorials or reaction videos)"
+      },
+      {
+        "type": "create_followup",
+        "note": "Follow up with new lead within 24 hours"
+      },
+      {
+        "type": "log_note",
+        "note": "New lead welcomed via automation"
+      }
+    ],
+    "enabled": true,
+    "runs": [
+      {
+        "at": "2026-11-20T01:05:02.139Z",
+        "event": "lead.created",
+        "results": [
+          {
+            "action": "draft_reply",
+            "ok": false,
+            "error": "no lead in this event"
+          },
+          {
+            "action": "create_followup",
+            "ok": false,
+            "error": "no lead in this event"
+          },
+          {
+            "action": "log_note",
+            "ok": true,
+            "error": null
+          }
+        ]
+      }
+    ],
+    "createdAt": "2026-11-20T01:05:00.570Z"
   }
 ]

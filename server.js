@@ -678,6 +678,32 @@ app.post("/api/website/link", (req, res) => {
   }
 });
 
+app.get("/api/website/scan", (_req, res) => {
+  try {
+    res.json(website.scan());
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/website/publish", (_req, res) => {
+  try {
+    res.json(website.publish());
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// The DRAFT, visible only to the signed-in account — the public /site/<id>
+// address never shows unpublished work.
+app.get("/api/website/draft", (req, res) => {
+  const html = website.draftHtml();
+  if (!html) return res.status(404).send("No draft yet.");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Security-Policy", "default-src 'self' data:; style-src 'unsafe-inline' 'self'; img-src 'self' data:; script-src 'none'; frame-ancestors 'self'");
+  res.send(html);
+});
+
 app.post("/api/website/restore", (req, res) => {
   try {
     res.json(website.restore((req.body || {}).index));
