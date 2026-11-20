@@ -20,28 +20,26 @@
        crisp at any size and we can animate parts (arm wave, cursor blink).
        B blue · L highlight · D shade · S screen · C cyan · U blinking cursor */
     var ART = [
-      "..........BBBBBBBB..........",
-      "........BBBBBBBBBBBB........",
-      "....BLLBBBBBBBBBBBBBBBB.....",
-      "...BLBBBBBBBBBBBBBBBBBBB....",
-      ".BBBBBBBBBBBBBBBBBBBBBBBBB..",
-      "BLLBBBBBSSSSSSSSSSSSBBBBBBBB",
-      "BBBBBBBBSSCCSSSSSSSSBBBBBBBB",
-      "BBBBBBBBSSSCCSSSSSSSBBBBBBBB",
-      "BBBBBBBBSSSSCCSSSSSSBBBBBBBB",
-      "BBBBBBBBSSSCCSSSSSSSBBBBBBBB",
-      "BBBBBBBBSSCCSSSUUUSSBBBBBBBB",
-      "BBBBBBBBSSSSSSSSSSSSBBBBBBBB",
-      ".BBBBBBBBBBBBBBBBBBBBBBBBBB.",
-      ".BBBBBBBBBBBBBBBBBBBBBBBBBB.",
-      "..DDDDDDDDDDDDDDDDDDDDDDDD..",
-      "...DDDDDD..DDDDDD..DDDDDD...",
+      "............PPPP............",
+      "............PPPP............",
+      ".............BB.............",
+      "....BBBBBBBBBBBBBBBBBBBB....",
+      "...BLLBBBBBBBBBBBBBBBBBBB...",
+      "..BLBBSSSSSSSSSSSSSSSSBBBB..",
+      "PPBBBBSSSCCSSSSSSSSSSSBBBBPP",
+      "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
+      "PPBBBBSSSSSCCSSSSSSSSSBBBBPP",
+      "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
+      "..BBBBSSSCCSSSSUUUSSSSBBBB..",
+      "..BBBBBBBBBBBBBBBBBBBBBBBB..",
+      "...BBBBBBBBBBBBBBBBBBBBBB...",
+      "....DDDDDDDDDDDDDDDDDDDD....",
       "............BBBB............",
-      "..........BBBBBBBB..........",
-      "......BBBBBBBBBBBBBBBB......",
-      ".....BBB.BBSSSSSSBB.BBB.....",
-      ".....BBB.BBSCCSCSBB.BBB.....",
-      ".....BBB.BBSSSSSSBB.BBB.....",
+      "........BBBBBBBBBBBB........",
+      ".....BBBBBBBBBBBBBBBBBB.....",
+      ".....BBB.BBBPPPPBBB.BBB.....",
+      ".....BBB.BBBPPPPBBB.BBB.....",
+      ".....BBB.BBBPPPPBBB.BBB.....",
       "......BB.BBBBBBBBBB.BB......",
       ".........BBBBBBBBBB.........",
       ".........BBBBBBBBBB.........",
@@ -51,7 +49,7 @@
       ".........BBBB..BBBB.........",
       ".........DDDD..DDDD........."
     ];
-    var INK = { B: "#4D7CF0", L: "#8FB2F8", D: "#3B5ED1", S: "#101831", C: "#5FE9F7", U: "#5FE9F7" };
+    var INK = { B: "#3E7BEA", L: "#82ACF6", D: "#2E5BC2", S: "#0E1430", C: "#5FE9F7", U: "#5FE9F7", P: "#E84393" };
     function botSVG() {
       var body = "", arm = "", face = "";
       ART.forEach(function (row, y) {
@@ -60,18 +58,18 @@
           if (ch === ".") continue;
           var cls = ch === "U" ? ' class="px-u"' : ch === "C" ? ' class="px-c"' : "";
           var r = '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + INK[ch] + '"' + cls + "/>";
-          if (y >= 18 && y <= 22 && x >= 19) arm += r;                 // waving arm
+          if (y >= 17 && y <= 20 && x >= 20) arm += r;                 // waving arm
           else if ((ch === "C" || ch === "U") && y <= 11) face += r;   // the normal face
           else body += r;
         }
       });
       // the OUCH face: X X eyes and a flat little mouth, shown on impacts
       var hurt = "";
-      [[6,10],[6,12],[7,11],[8,10],[8,12],  [6,15],[6,17],[7,16],[8,15],[8,17],
-       [10,12],[10,13],[10,14],[10,15]].forEach(function (c) {
+      [[6,9],[6,11],[7,10],[8,9],[8,11],  [6,14],[6,16],[7,15],[8,14],[8,16],
+       [10,11],[10,12],[10,13],[10,14]].forEach(function (c) {
         hurt += '<rect x="' + c[1] + '" y="' + c[0] + '" width="1" height="1" fill="#FF6B81"/>';
       });
-      return '<svg class="px-bot" viewBox="0 0 28 30" shape-rendering="crispEdges" aria-hidden="true">' +
+      return '<svg class="px-bot" viewBox="0 0 28 28" shape-rendering="crispEdges" aria-hidden="true">' +
         '<g>' + body + '</g><g class="face-normal">' + face + '</g><g class="face-hurt">' + hurt + '</g><g class="px-arm">' + arm + "</g></svg>";
     }
     fab.innerHTML = '<span class="px-wrap">' + botSVG() + "</span>" + '<span class="fab-tip">Ask HarperLinks</span>';

@@ -15,6 +15,19 @@
     create_lead: "Saving the lead to the CRM",
     book_appointment: "Checking the calendar & booking",
     add_task: "Adding the task",
+    list_automations: "Checking your automations",
+    list_automation_options: "Checking what automations can do",
+    create_automation: "Building the automation",
+    test_automation: "Testing the automation",
+    get_website: "Checking your website",
+    build_website: "Building the website",
+    edit_website: "Editing the website",
+    publish_website: "Running the security scan & publishing",
+    get_website_html: "Reading the site's code",
+    manage_employee: "Updating your AI team",
+    get_usage: "Checking your usage",
+    list_tasks: "Checking your tasks",
+    complete_task: "Ticking off the task",
   };
 
   /* ---------- the shared chat panel ---------- */

@@ -963,7 +963,7 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 @keyframes botExcite{0%{transform:scale(1,1)}30%{transform:scale(1.14,.84) rotate(-4deg)}
   60%{transform:scale(.92,1.1) rotate(3deg)}80%{transform:scale(1.05,.97)}100%{transform:scale(1,1)}}
 .hl-fab:hover .px-c,.hl-fab:hover .px-u{filter:brightness(1.35) drop-shadow(0 0 1px #5FE9F7)}
-.px-arm{transform-box:view-box;transform-origin:20px 18px}
+.px-arm{transform-box:view-box;transform-origin:21px 17px}
 .hl-fab:hover .px-arm{animation:botWave .7s ease-in-out}
 @keyframes botWave{0%,100%{transform:rotate(0)}30%{transform:rotate(-24deg)}55%{transform:rotate(10deg)}75%{transform:rotate(-14deg)}}
 

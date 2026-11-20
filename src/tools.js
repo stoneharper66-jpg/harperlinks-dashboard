@@ -6,6 +6,7 @@ const dt = require("./datetime");
 const store = require("./store");
 const events = require("./events");
 const employees = require("./employees");
+const budget = require("./budget");
 const { ingestWebsite } = require("./ingest");
 
 const PLATFORMS = ["instagram", "facebook", "tiktok"];
@@ -281,6 +282,39 @@ const toolSchemas = [
     name: "get_website_html",
     description: "Read the current HTML of the site you built, so you can edit it precisely.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "manage_employee",
+    description:
+      "Activate, pause, or change the operating mode of an AI employee. Employee ids: social (Sage, Social Media Manager), support (Riley, Customer Support), receptionist (Harper), sales (Flynn), web (Indi, Website Builder), manager (Darcy, Business Manager). Modes: assisted, supervised, autonomous.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Employee id, e.g. 'content' or 'manager'" },
+        enabled: { type: "boolean", description: "true to activate, false to pause" },
+        mode: { type: "string", enum: ["assisted", "supervised", "autonomous"] },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "get_usage",
+    description: "Check this month's AI usage budget — cap, spent, remaining. Use when the user asks about usage, limits, or costs.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_tasks",
+    description: "List the user's open tasks and reminders.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "complete_task",
+    description: "Mark a task as done. Pass the task id from list_tasks, or part of its wording.",
+    input_schema: {
+      type: "object",
+      properties: { task: { type: "string", description: "Task id or a distinctive part of its text" } },
+      required: ["task"],
+    },
   },
 ];
 
@@ -565,6 +599,53 @@ function makeHandlers(base = dt.now()) {
 
     get_knowledge() {
       return { ok: true, content: JSON.stringify(store.getKnowledge()) };
+    },
+
+    manage_employee(input) {
+      const patch = {};
+      if (typeof input.enabled === "boolean") patch.enabled = input.enabled;
+      if (input.mode) patch.mode = input.mode;
+      if (!Object.keys(patch).length) return { ok: false, content: "Say what to change: enabled true/false and/or a mode." };
+      const emp = employees.updateEmployee(input.id, patch);
+      if (!emp) {
+        const ids = employees.getEmployees().map((e) => `${e.id} (${e.name}, ${e.role})`).join(", ");
+        return { ok: false, content: `No employee called "${input.id}". The team: ${ids}.` };
+      }
+      return {
+        ok: true,
+        content: `${emp.name} (${emp.role}) is now ${emp.enabled ? "active" : "paused"} in ${emp.mode} mode.`,
+        action: { type: "employee", employee: { id: emp.id, name: emp.name, enabled: emp.enabled, mode: emp.mode } },
+      };
+    },
+
+    get_usage() {
+      const s = budget.status();
+      return {
+        ok: true,
+        content: `Usage for ${s.month}: A$${s.spent.toFixed(2)} spent of the A$${s.cap.toFixed(2)} monthly cap — A$${s.remaining.toFixed(2)} left (${s.percent}%).${s.exhausted ? " The cap is exhausted; raise it in Settings to keep going." : ""}`,
+      };
+    },
+
+    list_tasks() {
+      const open = store.getCol("tasks").filter((t) => t.status === "open");
+      if (!open.length) return { ok: true, content: "No open tasks — all clear." };
+      return {
+        ok: true,
+        content: open.map((t) => `${t.id}: ${t.what}${t.dueAt ? ` (due ${formatWhen(t.dueAt)})` : ""}`).join("\n"),
+      };
+    },
+
+    complete_task(input) {
+      const tasks = store.getCol("tasks");
+      const q = String(input.task || "").toLowerCase().trim();
+      if (!q) return { ok: false, content: "Which task?" };
+      const t = tasks.find((x) => x.status === "open" && (x.id === input.task || x.what.toLowerCase().includes(q)));
+      if (!t) return { ok: false, content: `Couldn't find an open task matching "${input.task}". Use list_tasks to see them.` };
+      t.status = "done";
+      t.completedAt = new Date().toISOString();
+      store.saveCol("tasks", tasks);
+      store.logActivity("task", `Task completed: ${t.what}`, t.id);
+      return { ok: true, content: `Done: "${t.what}" ticked off.`, action: { type: "task", record: t } };
     },
 
     create_lead(input) {
