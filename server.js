@@ -611,7 +611,30 @@ app.patch("/api/employees/:id", (req, res) => {
 // ---- automations ------------------------------------------------------------------------
 
 app.get("/api/workflows", (_req, res) => res.json(store.getCol("workflows")));
-app.get("/api/workflow-options", (_req, res) => res.json({ triggers: events.TRIGGERS, actions: events.ACTIONS }));
+app.get("/api/workflow-options", (_req, res) => {
+  const connectors = require("./src/connectors");
+  // the generic send_webhook entry is replaced by one concrete entry per
+  // connector, so the builder reads "Send the event to Zapier" not jargon
+  const actions = events.ACTIONS.filter((a) => a.id !== "send_webhook")
+    .concat(connectors.listPublic().map((c) => ({ id: `send_webhook:${c.id}`, label: `Send the event to ${c.name}`, local: true })));
+  res.json({ triggers: events.TRIGGERS, actions });
+});
+
+// ---- custom connectors (webhooks) -------------------------------------------
+const connectorsMod = require("./src/connectors");
+app.get("/api/connectors", (_req, res) => res.json(connectorsMod.listPublic()));
+app.post("/api/connectors", async (req, res) => {
+  try { res.json(await connectorsMod.create(req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.delete("/api/connectors/:id", (req, res) => {
+  try { connectorsMod.remove(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/connectors/:id/test", async (req, res) => {
+  try { res.json(await connectorsMod.test(req.params.id)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 app.post("/api/workflows", (req, res) => {
   const b = req.body || {};

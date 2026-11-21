@@ -1051,10 +1051,10 @@
     title: "Integrations",
     render: function () {
       var isAdmin = HL.user && HL.user.role === "admin";
-      var reqs = [HL.api("/api/integrations")];
+      var reqs = [HL.api("/api/integrations"), HL.api("/api/connectors").catch(function () { return []; })];
       if (isAdmin) reqs.push(HL.api("/api/ghl/connect-info").catch(function () { return null; }));
       return Promise.all(reqs).then(function (out) {
-        var ints = out[0], ci = out[1];
+        var ints = out[0], conns = out[1], ci = out[2];
         var root = HL.el("div");
         root.appendChild(HL.el("p", "sec-intro", "Nothing shows connected unless it really is."));
 
@@ -1123,6 +1123,73 @@
           list.appendChild(row);
         });
         root.appendChild(list);
+
+        /* ---- your own connectors (webhooks) ---- */
+        var ch = HL.el("div");
+        ch.style.cssText = "max-width:720px;margin:26px auto 10px;display:flex;align-items:center;justify-content:space-between;gap:10px";
+        var chT = HL.el("div");
+        chT.innerHTML = "<b style='font-size:14.5px'>Your connectors</b><div style='font-size:12.5px;color:var(--muted);margin-top:2px'>Point HarperLinks at any webhook — Zapier, Make, n8n, your own site — and workflows can send events to it.</div>";
+        ch.appendChild(chT);
+        var addC = HL.el("button", "btn sm", "+ Add connector");
+        addC.addEventListener("click", function () {
+          var body = HL.el("div");
+          var nm = HL.input("Name — e.g. Zapier leads hook");
+          var url = HL.input("https://hooks.zapier.com/…");
+          var sec = HL.input("Signing secret (optional)");
+          var note = HL.el("p", null, "Workflows POST the event as JSON. With a secret set, every delivery is signed (X-HarperLinks-Signature, HMAC-SHA256) so the other end can verify it's really you.");
+          note.style.cssText = "color:var(--muted);font-size:12.5px;line-height:1.55";
+          body.appendChild(HL.field("Name", nm));
+          body.appendChild(HL.field("Webhook URL", url));
+          body.appendChild(HL.field("Secret", sec));
+          body.appendChild(note);
+          HL.modal("Add connector", body, function () {
+            return HL.post("/api/connectors", { name: nm.value, url: url.value, secret: sec.value })
+              .then(function () { HL.toast("Connector added — hit Test to check it"); HL.navigate(); });
+          }, "Add");
+        });
+        ch.appendChild(addC);
+        root.appendChild(ch);
+
+        var clist = HL.el("div", "rowlist");
+        clist.style.cssText = "max-width:720px;margin:0 auto";
+        if (!conns.length) {
+          var ce = HL.el("div", "lsub");
+          ce.style.cssText = "max-width:720px;margin:4px auto 0;text-align:center;padding:16px;border:1.5px dashed var(--border);border-radius:14px";
+          ce.textContent = "No connectors yet — add one and it becomes a workflow step: \"Send the event to …\"";
+          clist.appendChild(ce);
+        }
+        conns.forEach(function (c) {
+          var row = HL.el("div", "lrow");
+          row.appendChild(HL.el("div", "mono on", "⟐"));
+          var main = HL.el("div", "lmain");
+          main.appendChild(HL.el("div", "lname", c.name));
+          var ls = c.lastStatus;
+          var stText = !ls ? "never fired yet"
+            : ls.ok ? "last delivery worked (HTTP " + ls.code + ") · " + HL.fmtWhen(ls.at)
+            : "last delivery FAILED — " + (ls.error || "") + " · " + HL.fmtWhen(ls.at);
+          main.appendChild(HL.el("div", "lsub", c.host + (c.hasSecret ? " · signed" : "") + " · " + stText));
+          row.appendChild(main);
+          var ctl = HL.el("div", "lctl");
+          ctl.style.cssText = "display:flex;gap:7px";
+          var tBtn = HL.el("button", "btn ghost sm", "Test");
+          tBtn.addEventListener("click", function () {
+            tBtn.disabled = true; tBtn.textContent = "Testing…";
+            HL.post("/api/connectors/" + c.id + "/test").then(function (o) {
+              HL.toast(o.ok ? "Delivered — HTTP " + o.code : "Failed: " + o.error, !o.ok);
+              HL.navigate();
+            }).catch(function (e) { HL.toast(e.message, true); HL.navigate(); });
+          });
+          ctl.appendChild(tBtn);
+          var rBtn = HL.el("button", "btn ghost sm", "Remove");
+          rBtn.addEventListener("click", function () {
+            HL.api("/api/connectors/" + c.id, { method: "DELETE" }).then(function () { HL.toast("Connector removed"); HL.navigate(); });
+          });
+          ctl.appendChild(rBtn);
+          row.appendChild(ctl);
+          clist.appendChild(row);
+        });
+        root.appendChild(clist);
+
         return root;
       });
     },

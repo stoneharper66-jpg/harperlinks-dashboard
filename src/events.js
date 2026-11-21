@@ -7,6 +7,7 @@
 const store = require("./store");
 const employees = require("./employees");
 const media = require("./media");
+const connectors = require("./connectors");
 const ghl = require("./ghl");
 
 // Trigger types the engine can actually fire today.
@@ -27,6 +28,7 @@ const ACTIONS = [
   { id: "draft_reply", label: "AI-draft an outreach message (saved to the lead)", local: true },
   { id: "generate_image", label: "AI-design a branded image for the post", local: true },
   { id: "publish_everywhere", label: "Publish the post to every connected social account", local: true },
+  { id: "send_webhook", label: "Send the event to a connector (webhook)", local: true },
   { id: "send_sms", label: "Send an SMS (needs Twilio)", local: false, needs: "Twilio" },
   { id: "send_email", label: "Send an email (needs Gmail/SMTP)", local: false, needs: "Email" },
 ];
@@ -43,7 +45,8 @@ async function runAction(action, event, payload, workflow) {
       return { ok: false, error: `${emp.name} is switched off` };
     }
   }
-  switch (action.type) {
+  const actionType = String(action.type || "").startsWith("send_webhook") ? "send_webhook" : action.type;
+  switch (actionType) {
     case "log_note": {
       store.logActivity("automation", `Workflow "${workflow.name}": ${action.note || "step executed"} (${event})`);
       return { ok: true };
@@ -149,6 +152,19 @@ async function runAction(action, event, payload, workflow) {
       store.logActivity("automation",
         `Workflow "${workflow.name}" published to ${sent.length ? sent.join(", ") : "nothing"}${failed.length ? ` — failed: ${failed.join("; ")}` : ""}`, post.id);
       return sent.length ? { ok: true } : { ok: false, error: failed.join("; ") || "nothing connected" };
+    }
+    case "send_webhook": {
+      // built from the UI as "send_webhook:<connectorId>", or by the AI with
+      // an explicit connectorId — accept both
+      const connId = action.connectorId || String(action.type).split(":")[1] || null;
+      if (!connId) return { ok: false, error: "no connector chosen for this step" };
+      const conn = connectors.get(connId);
+      if (!conn) return { ok: false, error: "that connector no longer exists" };
+      const out = await connectors.fire(connId, event, payload || {});
+      store.logActivity("automation", out.ok
+        ? `Workflow "${workflow.name}" delivered the event to connector "${conn.name}" (HTTP ${out.code})`
+        : `Workflow "${workflow.name}" couldn't reach connector "${conn.name}" — ${out.error}`);
+      return out.ok ? { ok: true } : { ok: false, error: out.error };
     }
     case "send_sms":
     case "send_email": {

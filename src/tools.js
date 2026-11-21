@@ -390,7 +390,9 @@ function makeHandlers(base = dt.now()) {
         ok: true,
         content:
           "TRIGGERS: " + events.TRIGGERS.map((t) => `${t.id} (${t.label})`).join("; ") +
-          "\nACTIONS: " + events.ACTIONS.map((a) => `${a.id} (${a.label})${a.local ? " [runs for real]" : ` [needs ${a.needs}]`}`).join("; "),
+          "\nACTIONS: " + events.ACTIONS.map((a) => `${a.id} (${a.label})${a.local ? " [runs for real]" : ` [needs ${a.needs}]`}`).join("; ") +
+          "\nCONNECTORS (for send_webhook — set connectorId on the action): " +
+          (require("./connectors").listPublic().map((c) => `${c.id} (${c.name})`).join("; ") || "none added yet"),
       };
     },
 
