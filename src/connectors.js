@@ -138,4 +138,4 @@ async function test(id) {
   return out;
 }
 
-module.exports = { list, listPublic, get, create, remove, fire, test, publicConnector };
+module.exports = { list, listPublic, get, create, remove, fire, test, publicConnector, assertSafeUrl };

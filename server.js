@@ -129,7 +129,7 @@ app.post("/api/public/ask", async (req, res) => {
   if (rateLimited(ip)) return res.status(429).json({ error: "Easy on! Give it a few seconds and ask again." });
   try {
     const out = await tenant.run(tenant.MAIN, () =>
-      siteAgent.ask((req.body || {}).visitorId, (req.body || {}).message)
+      siteAgent.ask((req.body || {}).visitorId, (req.body || {}).message, (req.body || {}).persona)
     );
     res.json(out);
   } catch (e) {

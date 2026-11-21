@@ -220,5 +220,11 @@
     "type": "automation",
     "message": "Workflow \"Welcome new leads\": New lead welcomed via automation (lead.created)",
     "refId": null
+  },
+  {
+    "at": "2026-11-21T10:08:10.106Z",
+    "type": "system",
+    "message": "Nightly backup done — harperlinks-2026-11-21.tgz (9 KB), last 14 kept",
+    "refId": null
   }
 ]
