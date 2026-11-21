@@ -135,6 +135,57 @@ app.post("/api/public/ask", async (req, res) => {
   }
 });
 
+// New sign-ups from the marketing site land straight in Stone's dashboard
+// (the main account's CRM) and try to email the team. Public endpoint:
+// rate-limited, validated, and it never reveals whether the email worked.
+app.options("/api/public/signup", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+app.post("/api/public/signup", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").split(",")[0].trim();
+  if (rateLimited(ip)) return res.status(429).json({ error: "Easy on! Give it a few seconds and try again." });
+  const b = req.body || {};
+  const name = String(b.name || "").trim().slice(0, 80);
+  const email = String(b.email || "").trim().slice(0, 120);
+  if (!name) return res.status(400).json({ error: "What's your name?" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "That email doesn't look right." });
+  const phone = String(b.phone || "").trim().slice(0, 40);
+  const business = String(b.business || "").trim().slice(0, 80);
+  const plan = ["professional", "business", "enterprise", "not sure"].includes(b.plan) ? b.plan : "not sure";
+  const message = String(b.message || "").trim().slice(0, 500);
+
+  const notify = require("./src/notify");
+  await tenant.run(tenant.MAIN, async () => {
+    const leads = store.getCol("leads");
+    const record = {
+      id: store.newId("lead"),
+      name, phone, email,
+      interest: `${business ? business + " — " : ""}${plan} plan${message ? ` · "${message}"` : ""}`,
+      source: "website signup",
+      status: "new", score: 80,
+      tags: ["signup", plan.replace(" ", "-")],
+      notes: [], followUps: [],
+      createdAt: new Date().toISOString(),
+    };
+    leads.push(record);
+    store.saveCol("leads", leads);
+    store.logActivity("lead", `Website sign-up: ${name}${business ? ` (${business})` : ""} wants the ${plan} plan`, record.id);
+    events.emit("lead.created", { leadId: record.id, summary: record.interest });
+
+    const mail = await notify.sendToTeam(
+      `HarperLinks sign-up: ${name}${business ? ` — ${business}` : ""}`,
+      `New sign-up from the website\n\nName: ${name}\nBusiness: ${business || "—"}\nEmail: ${email}\nPhone: ${phone || "—"}\nPlan: ${plan}\nMessage: ${message || "—"}\n\nThey're in your CRM (Customers page) as a new lead. Reach out within a day — that's the promise on the site.`
+    );
+    store.logActivity("lead", mail.sent
+      ? `Sign-up email sent to ${notify.NOTIFY_EMAIL}`
+      : `Sign-up email NOT sent — ${mail.reason}. The lead is safe in the CRM.`, record.id);
+  });
+  res.json({ ok: true });
+});
+
 // ---------------- the customer's built website, served publicly ----------------
 // A site the AI built for an account is a real public page: /site/<accountId>.
 // It's their content, served as-is. No session needed — that's the point.
