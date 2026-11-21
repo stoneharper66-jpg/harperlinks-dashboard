@@ -87,6 +87,48 @@
             "error": null
           }
         ]
+      },
+      {
+        "at": "2026-11-21T09:58:23.267Z",
+        "event": "lead.created",
+        "results": [
+          {
+            "action": "draft_reply",
+            "ok": true,
+            "error": null
+          },
+          {
+            "action": "create_followup",
+            "ok": true,
+            "error": null
+          },
+          {
+            "action": "log_note",
+            "ok": true,
+            "error": null
+          }
+        ]
+      },
+      {
+        "at": "2026-11-21T09:58:46.495Z",
+        "event": "lead.created",
+        "results": [
+          {
+            "action": "draft_reply",
+            "ok": true,
+            "error": null
+          },
+          {
+            "action": "create_followup",
+            "ok": true,
+            "error": null
+          },
+          {
+            "action": "log_note",
+            "ok": true,
+            "error": null
+          }
+        ]
       }
     ],
     "createdAt": "2026-11-20T01:05:00.570Z"

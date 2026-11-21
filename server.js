@@ -28,6 +28,9 @@ const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Public liveness probe for the host's health checks — no auth, no data.
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
 // ---- CORS for the marketing site -------------------------------------------
 // The site's robot can act as the signed-in owner: when the owner's browser
 // already holds a dashboard session, the site may call the real API with
@@ -133,6 +136,31 @@ app.post("/api/public/ask", async (req, res) => {
     console.error("site agent error:", e.message);
     res.status(500).json({ error: "The assistant hit a snag — try again in a moment." });
   }
+});
+
+// Anonymous pageview beacon from the marketing site. Stores one counter per
+// day per page in the main account — no IPs, no cookies, nothing personal,
+// which is why there's no consent banner to go with it.
+app.options("/api/public/ping", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+app.post("/api/public/ping", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").split(",")[0].trim();
+  if (rateLimited(ip)) return res.status(204).end();
+  const page = String((req.body || {}).page || "/").slice(0, 80);
+  const day = new Date().toISOString().slice(0, 10);
+  tenant.run(tenant.MAIN, () => {
+    const stats = store.getCol("site-stats", {});
+    stats[day] = stats[day] || {};
+    stats[day][page] = (stats[day][page] || 0) + 1;
+    // keep 90 days
+    Object.keys(stats).sort().slice(0, -90).forEach((k) => delete stats[k]);
+    store.saveCol("site-stats", stats);
+  });
+  res.status(204).end();
 });
 
 // New sign-ups from the marketing site land straight in Stone's dashboard
@@ -1048,6 +1076,26 @@ app.get("/api/report", async (_req, res) => {
 // ---- start -------------------------------------------------------------------
 
 scheduler.start();
+require("./src/backup").start();
+
+// ---- crash alerting ----------------------------------------------------------
+// A crash gets logged, and (when SMTP is set up) emailed to the team — at
+// most one email per 10 minutes so a crash-loop doesn't flood the inbox.
+let lastAlert = 0;
+function alertError(kind, err) {
+  const msg = `${kind}: ${err && err.stack ? err.stack.split("\n").slice(0, 4).join("\n") : err}`;
+  console.error(msg);
+  try {
+    tenant.run(tenant.MAIN, () => store.logActivity("system", `Server error — ${String(err && err.message || err).slice(0, 140)}`));
+    if (Date.now() - lastAlert > 10 * 60 * 1000) {
+      lastAlert = Date.now();
+      require("./src/notify").sendToTeam("HarperLinks server error", msg).catch(() => {});
+    }
+  } catch { /* alerting must never crash the crash handler */ }
+}
+process.on("uncaughtException", (e) => alertError("uncaughtException", e));
+process.on("unhandledRejection", (e) => alertError("unhandledRejection", e));
+
 app.listen(PORT, () => {
   console.log(`HarperLinks Automation running at http://localhost:${PORT}`);
   console.log(`Mode: ${engine.mode() === "live" ? "LIVE (Claude)" : "DEMO (no API key — demo brain active)"}`);

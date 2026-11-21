@@ -1,0 +1,64 @@
+[
+  {
+    "id": "lead_mwq8jb4x1",
+    "name": "Website Test",
+    "phone": "",
+    "email": "websitetest@example.com",
+    "interest": "not sure plan",
+    "source": "website signup",
+    "status": "new",
+    "score": 80,
+    "tags": [
+      "signup",
+      "not-sure"
+    ],
+    "notes": [
+      {
+        "at": "2026-11-21T09:58:23.267Z",
+        "text": "[AI draft — review before sending] Hi Website, thanks for getting in touch! We'd love to help — when suits you for a quick chat?",
+        "by": "workflow:Welcome new leads"
+      }
+    ],
+    "followUps": [
+      {
+        "id": "fu_mwq8jb502",
+        "note": "Follow up with new lead within 24 hours",
+        "due": "2026-11-22T09:58:23.268Z",
+        "done": false,
+        "createdBy": "workflow:Welcome new leads"
+      }
+    ],
+    "createdAt": "2026-11-21T09:58:23.265Z"
+  },
+  {
+    "id": "lead_mwq8jt263",
+    "name": "Website Test",
+    "phone": "",
+    "email": "websitetest@example.com",
+    "interest": "UI test — safe to delete — not sure plan",
+    "source": "website signup",
+    "status": "new",
+    "score": 80,
+    "tags": [
+      "signup",
+      "not-sure"
+    ],
+    "notes": [
+      {
+        "at": "2026-11-21T09:58:46.495Z",
+        "text": "[AI draft — review before sending] Hi Website, thanks for getting in touch! We'd love to help — when suits you for a quick chat?",
+        "by": "workflow:Welcome new leads"
+      }
+    ],
+    "followUps": [
+      {
+        "id": "fu_mwq8jt284",
+        "note": "Follow up with new lead within 24 hours",
+        "due": "2026-11-22T09:58:46.496Z",
+        "done": false,
+        "createdBy": "workflow:Welcome new leads"
+      }
+    ],
+    "createdAt": "2026-11-21T09:58:46.494Z"
+  }
+]

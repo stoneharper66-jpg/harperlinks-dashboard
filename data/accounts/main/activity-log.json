@@ -160,5 +160,65 @@
     "type": "website",
     "message": "Website draft saved — Switched to a clean all-white light theme",
     "refId": null
+  },
+  {
+    "at": "2026-11-21T09:58:23.266Z",
+    "type": "lead",
+    "message": "Website sign-up: Website Test wants the not sure plan",
+    "refId": "lead_mwq8jb4x1"
+  },
+  {
+    "at": "2026-11-21T09:58:23.267Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\" drafted an outreach message for Website Test (in their notes)",
+    "refId": "lead_mwq8jb4x1"
+  },
+  {
+    "at": "2026-11-21T09:58:23.268Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\" added a follow-up for Website Test",
+    "refId": "lead_mwq8jb4x1"
+  },
+  {
+    "at": "2026-11-21T09:58:23.268Z",
+    "type": "lead",
+    "message": "Sign-up email NOT sent — email isn't set up yet (add SMTP_HOST/SMTP_USER/SMTP_PASS to .env). The lead is safe in the CRM.",
+    "refId": "lead_mwq8jb4x1"
+  },
+  {
+    "at": "2026-11-21T09:58:23.268Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\": New lead welcomed via automation (lead.created)",
+    "refId": null
+  },
+  {
+    "at": "2026-11-21T09:58:46.495Z",
+    "type": "lead",
+    "message": "Website sign-up: Website Test (UI test — safe to delete) wants the not sure plan",
+    "refId": "lead_mwq8jt263"
+  },
+  {
+    "at": "2026-11-21T09:58:46.495Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\" drafted an outreach message for Website Test (in their notes)",
+    "refId": "lead_mwq8jt263"
+  },
+  {
+    "at": "2026-11-21T09:58:46.496Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\" added a follow-up for Website Test",
+    "refId": "lead_mwq8jt263"
+  },
+  {
+    "at": "2026-11-21T09:58:46.496Z",
+    "type": "lead",
+    "message": "Sign-up email NOT sent — email isn't set up yet (add SMTP_HOST/SMTP_USER/SMTP_PASS to .env). The lead is safe in the CRM.",
+    "refId": "lead_mwq8jt263"
+  },
+  {
+    "at": "2026-11-21T09:58:46.497Z",
+    "type": "automation",
+    "message": "Workflow \"Welcome new leads\": New lead welcomed via automation (lead.created)",
+    "refId": null
   }
 ]
