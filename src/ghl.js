@@ -164,4 +164,10 @@ async function health() {
   }
 }
 
-module.exports = { isConfigured, saveConfig, listAccounts, publishPost, health };
+// For the admin's fast-connect button only — never sent to customers.
+function connectInfo() {
+  const { locationId } = config();
+  return { locationId };
+}
+
+module.exports = { isConfigured, saveConfig, listAccounts, publishPost, health, connectInfo };

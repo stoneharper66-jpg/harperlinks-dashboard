@@ -1050,9 +1050,35 @@
   HL.pages.integrations = {
     title: "Integrations",
     render: function () {
-      return HL.api("/api/integrations").then(function (ints) {
+      var isAdmin = HL.user && HL.user.role === "admin";
+      var reqs = [HL.api("/api/integrations")];
+      if (isAdmin) reqs.push(HL.api("/api/ghl/connect-info").catch(function () { return null; }));
+      return Promise.all(reqs).then(function (out) {
+        var ints = out[0], ci = out[1];
         var root = HL.el("div");
         root.appendChild(HL.el("p", "sec-intro", "Nothing shows connected unless it really is."));
+
+        // Stone's fast lane: one click into this account's publishing engine
+        // to link socials, one click to re-check. Customers never see this.
+        if (isAdmin) {
+          var fast = HL.el("div", "admin-connect");
+          var txt = HL.el("div");
+          txt.innerHTML = ci && ci.configured
+            ? "<b>Team fast-connect</b><span>Open the publishing engine, link the socials in its Social Planner, then re-check — the rows below flip green on their own.</span>"
+            : "<b>Team fast-connect</b><span>No publishing engine on this account yet — add the token in Customer Accounts first.</span>";
+          fast.appendChild(txt);
+          var btns = HL.el("div", "ac-btns");
+          if (ci && ci.configured) {
+            var open = HL.el("a", "btn sm", "Open connect window ↗");
+            open.href = ci.url; open.target = "_blank"; open.rel = "noopener";
+            btns.appendChild(open);
+          }
+          var recheck = HL.el("button", "btn ghost sm", "Re-check status");
+          recheck.addEventListener("click", function () { HL.toast("Checking all connections…"); HL.navigate(); });
+          btns.appendChild(recheck);
+          fast.appendChild(btns);
+          root.appendChild(fast);
+        }
         var list = HL.el("div", "rowlist");
         list.style.maxWidth = "720px";
         list.style.margin = "0 auto";
@@ -1552,6 +1578,18 @@
               .catch(function (e) { asBtn.disabled = false; HL.toast(e.message || "Couldn't sign in", true); });
           });
           ctl.appendChild(asBtn);
+
+          if (u.ghlConfigured) {
+            var socBtn = HL.el("button", "btn ghost sm", "Socials ↗");
+            socBtn.title = "Open this account's publishing engine to link Instagram/Facebook/TikTok/LinkedIn/YouTube";
+            socBtn.addEventListener("click", function () {
+              HL.api("/api/accounts/" + u.accountId + "/connect-info").then(function (ci) {
+                if (ci.configured) window.open(ci.url, "_blank", "noopener");
+                else HL.toast("No engine on this account yet — Connect first", true);
+              });
+            });
+            ctl.appendChild(socBtn);
+          }
 
           var ghlBtn = HL.el("button", "btn ghost sm", u.ghlConfigured ? "Reconnect" : "Connect");
           ghlBtn.addEventListener("click", function () {

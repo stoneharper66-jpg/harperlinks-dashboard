@@ -24,6 +24,8 @@
     edit_website: "Editing the website",
     publish_website: "Running the security scan & publishing",
     get_website_html: "Reading the site's code",
+    generate_image: "Designing the image",
+    generate_video: "Producing the video",
     manage_employee: "Updating your AI team",
     get_usage: "Checking your usage",
     list_tasks: "Checking your tasks",
@@ -469,8 +471,14 @@
       item.innerHTML = platIcon(p.platform) + '<div class="q-main"><div class="q-text"></div><div class="q-when"></div><div class="q-actions"></div></div>';
       item.querySelector(".q-text").textContent = (p.isVideo ? "VIDEO · " : "") + p.content;
       item.querySelector(".q-when").textContent = p.status === "published"
-        ? "Went out " + HL.fmtWhen(p.publishedAt) + " (simulated — platform not connected)"
+        ? "Went out " + HL.fmtWhen(p.publishedAt) + (p.simulated ? " (preview — platform not connected)" : " · live on " + p.platform)
         : p.scheduledAt ? HL.fmtWhen(p.scheduledAt) : "Draft — not scheduled";
+      if (p.mediaFile) {
+        var th = HL.el(p.mediaFile.slice(-4) === ".mp4" ? "video" : "img", "q-media");
+        th.src = "/api/media/file/" + p.mediaFile;
+        if (th.tagName === "VIDEO") { th.muted = true; th.loop = true; th.playsInline = true; th.autoplay = true; }
+        item.insertBefore(th, item.querySelector(".q-main"));
+      }
       var st = HL.el("span", "pill-st " + p.status, p.status);
       item.appendChild(st);
       var acts = item.querySelector(".q-actions");

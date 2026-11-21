@@ -6,6 +6,8 @@
 
 const store = require("./store");
 const employees = require("./employees");
+const media = require("./media");
+const ghl = require("./ghl");
 
 // Trigger types the engine can actually fire today.
 const TRIGGERS = [
@@ -23,14 +25,16 @@ const ACTIONS = [
   { id: "create_followup", label: "Create a follow-up task on the lead", local: true },
   { id: "draft_social_post", label: "AI-draft a social post about it", local: true },
   { id: "draft_reply", label: "AI-draft an outreach message (saved to the lead)", local: true },
+  { id: "generate_image", label: "AI-design a branded image for the post", local: true },
+  { id: "publish_everywhere", label: "Publish the post to every connected social account", local: true },
   { id: "send_sms", label: "Send an SMS (needs Twilio)", local: false, needs: "Twilio" },
   { id: "send_email", label: "Send an email (needs Gmail/SMTP)", local: false, needs: "Email" },
 ];
 
-function runAction(action, event, payload, workflow) {
+async function runAction(action, event, payload, workflow) {
   // AI-powered steps are staffed: Flynn handles lead outreach, Sage drafts content.
   // If that employee is switched off, the step waits honestly instead of running.
-  const STAFF = { draft_reply: "sales", create_followup: "sales", draft_social_post: "social" };
+  const STAFF = { draft_reply: "sales", create_followup: "sales", draft_social_post: "social", generate_image: "social", publish_everywhere: "social" };
   const staffId = STAFF[action.type];
   if (staffId) {
     const emp = employees.getState(staffId);
@@ -79,6 +83,7 @@ function runAction(action, event, payload, workflow) {
       };
       posts.push(record);
       store.savePosts(posts);
+      if (payload) payload.lastPostId = record.id; // later steps in this run pick it up
       store.logActivity("automation", `Workflow "${workflow.name}" drafted a ${record.platform} post (awaiting your review)`, record.id);
       return { ok: true };
     }
@@ -97,6 +102,54 @@ function runAction(action, event, payload, workflow) {
       store.logActivity("automation", `Workflow "${workflow.name}" drafted an outreach message for ${lead.name} (in their notes)`, lead.id);
       return { ok: true };
     }
+    case "generate_image": {
+      const posts = store.getPosts();
+      const pid = (payload && (payload.lastPostId || payload.postId)) || null;
+      const post = pid ? posts.find((p) => p.id === pid) : null;
+      const headline = post ? post.content.split(/[.!?\n]/)[0].slice(0, 90)
+        : (payload && payload.summary ? String(payload.summary).slice(0, 90) : null);
+      if (!headline) return { ok: false, error: "nothing to design an image from" };
+      const img = await media.generateImage({ headline, sub: "", style: action.style || "bold", format: action.format || "square" });
+      if (post) {
+        post.mediaId = img.id;
+        post.mediaFile = img.file;
+        if (process.env.PUBLIC_BASE_URL) {
+          post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${img.file}`;
+        }
+        store.savePosts(posts);
+      }
+      store.logActivity("automation", `Workflow "${workflow.name}" designed an image${post ? " and attached it to the draft post" : ""}`, img.id);
+      return { ok: true };
+    }
+    case "publish_everywhere": {
+      const posts = store.getPosts();
+      const pid = (payload && (payload.lastPostId || payload.postId)) || null;
+      const post = pid ? posts.find((p) => p.id === pid) : null;
+      if (!post) return { ok: false, error: "no post in this event to publish" };
+      if (!ghl.isConfigured()) {
+        store.logActivity("automation", `Workflow "${workflow.name}" skipped publish-everywhere — the publishing engine isn't connected yet`);
+        return { ok: false, error: "publishing engine not connected" };
+      }
+      let accounts;
+      try { accounts = await ghl.listAccounts(); }
+      catch (e) { return { ok: false, error: `couldn't read connected accounts — ${e.message}` }; }
+      const platforms = [...new Set(accounts.map((a) => String(a.platform || "").toLowerCase().replace("tiktok-business", "tiktok")))];
+      if (!platforms.length) return { ok: false, error: "no social accounts connected in the publishing engine" };
+      const sent = [], failed = [];
+      for (const plat of platforms) {
+        const out = await ghl.publishPost(Object.assign({}, post, { platform: plat }));
+        if (out.ok) sent.push(plat); else failed.push(`${plat} (${out.reason})`);
+      }
+      if (sent.length) {
+        post.status = "published";
+        post.publishedAt = new Date().toISOString();
+        post.simulated = false;
+        store.savePosts(posts);
+      }
+      store.logActivity("automation",
+        `Workflow "${workflow.name}" published to ${sent.length ? sent.join(", ") : "nothing"}${failed.length ? ` — failed: ${failed.join("; ")}` : ""}`, post.id);
+      return sent.length ? { ok: true } : { ok: false, error: failed.join("; ") || "nothing connected" };
+    }
     case "send_sms":
     case "send_email": {
       const needs = action.type === "send_sms" ? "Twilio" : "an email";
@@ -109,7 +162,7 @@ function runAction(action, event, payload, workflow) {
 }
 
 // Fire an event through all enabled workflows. Never throws.
-function emit(event, payload) {
+async function emit(event, payload) {
   let workflows;
   try {
     workflows = store.getCol("workflows");
@@ -122,7 +175,7 @@ function emit(event, payload) {
     const run = { at: new Date().toISOString(), event, results: [] };
     for (const action of wf.actions || []) {
       try {
-        const out = runAction(action, event, payload, wf);
+        const out = await runAction(action, event, payload, wf);
         run.results.push({ action: action.type, ok: out.ok, error: out.error || null });
       } catch (e) {
         run.results.push({ action: action.type, ok: false, error: e.message });

@@ -8,6 +8,7 @@ const events = require("./events");
 const employees = require("./employees");
 const budget = require("./budget");
 const { ingestWebsite } = require("./ingest");
+const media = require("./media");
 
 const PLATFORMS = ["instagram", "facebook", "tiktok"];
 
@@ -101,7 +102,7 @@ const toolSchemas = [
         hashtags: { type: "array", items: { type: "string" }, description: "Hashtags without the # sign" },
         scheduledFor: { type: "string", description: "Natural-language time, e.g. 'tomorrow 10am', 'next week'. Omit for a draft." },
         batchIndex: { type: "integer", description: "When creating several posts in one go, the 0-based index of this post — used to spread 'next week' across different days." },
-        isVideo: { type: "boolean", description: "True when the content is a video script/shot list rather than a text caption. Video RENDERING needs a video AI integration — write the full script yourself and be honest that footage isn't auto-generated yet." },
+        isVideo: { type: "boolean", description: "True when this post is a video. Pair it with generate_video (attach_to this post) to actually render the MP4." },
       },
       required: ["platform", "content"],
     },
@@ -284,6 +285,48 @@ const toolSchemas = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "generate_image",
+    description:
+      "REALLY design and render a branded social media image (PNG) — gradient/clean/dark layout with the business name, your headline and sub-line. Use for 'make me an image/graphic/post picture'. Optionally attach it straight onto an existing post with attach_to.",
+    input_schema: {
+      type: "object",
+      properties: {
+        headline: { type: "string", description: "The big text on the image — short and punchy, under 12 words" },
+        sub: { type: "string", description: "Smaller supporting line (optional)" },
+        style: { type: "string", enum: ["bold", "clean", "dark"], description: "bold = brand gradient, clean = white, dark = charcoal" },
+        format: { type: "string", enum: ["square", "story", "wide"], description: "square = feed, story = Stories/Reels/TikTok, wide = YouTube/link cards" },
+        attach_to: { type: "string", description: "Optional post id — attaches the image to that post" },
+      },
+      required: ["headline"],
+    },
+  },
+  {
+    name: "generate_video",
+    description:
+      "REALLY produce an MP4 slideshow video (30fps, zoom + crossfades) from 2-8 branded slides you write. Use for 'make me a video/reel/TikTok'. Each slide: a headline + optional sub-line. Optionally attach to a post with attach_to.",
+    input_schema: {
+      type: "object",
+      properties: {
+        slides: {
+          type: "array",
+          description: "2-8 slides in order",
+          items: {
+            type: "object",
+            properties: {
+              headline: { type: "string", description: "Big text for this slide" },
+              sub: { type: "string", description: "Smaller line (optional)" },
+            },
+            required: ["headline"],
+          },
+        },
+        style: { type: "string", enum: ["bold", "clean", "dark"] },
+        format: { type: "string", enum: ["story", "square", "wide"], description: "story (9:16) is right for Reels/TikTok" },
+        attach_to: { type: "string", description: "Optional post id — attaches the video to that post" },
+      },
+      required: ["slides"],
+    },
+  },
+  {
     name: "manage_employee",
     description:
       "Activate, pause, or change the operating mode of an AI employee. Employee ids: social (Sage, Social Media Manager), support (Riley, Customer Support), receptionist (Harper), sales (Flynn), web (Indi, Website Builder), manager (Darcy, Business Manager). Modes: assisted, supervised, autonomous.",
@@ -398,7 +441,7 @@ function makeHandlers(base = dt.now()) {
       };
     },
 
-    test_automation(input) {
+    async test_automation(input) {
       const events = require("./events");
       const wfs = store.getCol("workflows");
       const wf = wfs.find((w) => w.id === input.workflowId);
@@ -411,7 +454,7 @@ function makeHandlers(base = dt.now()) {
       const wasEnabled = wf.enabled;
       wf.enabled = true;
       store.saveCol("workflows", wfs);
-      events.emit(wf.trigger, payload);
+      await events.emit(wf.trigger, payload);
 
       const after = store.getCol("workflows");
       const updated = after.find((w) => w.id === wf.id);
@@ -599,6 +642,46 @@ function makeHandlers(base = dt.now()) {
 
     get_knowledge() {
       return { ok: true, content: JSON.stringify(store.getKnowledge()) };
+    },
+
+    async generate_image(input) {
+      try {
+        const img = await media.generateImage(input);
+        let attached = "";
+        if (input.attach_to) {
+          const posts = store.getPosts();
+          const post = findPost(posts, input.attach_to);
+          if (post) {
+            post.mediaId = img.id; post.mediaFile = img.file;
+            if (process.env.PUBLIC_BASE_URL) post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${img.file}`;
+            store.savePosts(posts);
+            attached = ` Attached to post ${post.id} — it'll upload with the post when it publishes.`;
+          } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+        }
+        return { ok: true, content: `Image rendered: ${img.format} ${img.w}x${img.h}, "${img.headline}".${attached} The owner can see it on the Social page.`, action: { type: "media", media: img } };
+      } catch (e) {
+        return { ok: false, content: `Image generation failed: ${e.message}` };
+      }
+    },
+
+    async generate_video(input) {
+      try {
+        const vid = await media.generateVideo(input);
+        let attached = "";
+        if (input.attach_to) {
+          const posts = store.getPosts();
+          const post = findPost(posts, input.attach_to);
+          if (post) {
+            post.mediaId = vid.id; post.mediaFile = vid.file; post.isVideo = true;
+            if (process.env.PUBLIC_BASE_URL) post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${vid.file}`;
+            store.savePosts(posts);
+            attached = ` Attached to post ${post.id}.`;
+          } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+        }
+        return { ok: true, content: `Video produced: ${vid.seconds}s, ${vid.slides} slides, ${vid.format} ${vid.w}x${vid.h}.${attached} The owner can watch it on the Social page.`, action: { type: "media", media: vid } };
+      } catch (e) {
+        return { ok: false, content: `Video generation failed: ${e.message}` };
+      }
     },
 
     manage_employee(input) {

@@ -152,6 +152,22 @@ app.get("/site/:accountId", (req, res) => {
   });
 });
 
+// Generated media, served publicly — these files exist to be uploaded to
+// social platforms, and GHL fetches them by URL when the dashboard is hosted.
+// Filenames are unguessable generated ids and the pattern is strictly checked.
+app.get("/media/:accountId/:name", (req, res) => {
+  const id = req.params.accountId;
+  if (!tenant.isValidId(id)) return res.status(404).end();
+  tenant.run(id, () => {
+    const media = require("./src/media");
+    const p = media.filePath(req.params.name);
+    if (!p) return res.status(404).end();
+    res.setHeader("Content-Type", p.endsWith(".mp4") ? "video/mp4" : "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(p);
+  });
+});
+
 // ============================== the sign-in gate =============================
 // Everything under /api from here on requires a signed-in user, and runs
 // inside that user's account context — the store physically can't read
@@ -200,6 +216,15 @@ app.get("/api/accounts", adminOnly, (_req, res) => {
     } catch { u.ghlConfigured = false; u.ghlConnected = false; }
   });
   res.json(users);
+});
+
+// Where to link this customer's socials (their engine's Social Planner).
+app.get("/api/accounts/:accountId/connect-info", adminOnly, (req, res) => {
+  const id = req.params.accountId;
+  if (!tenant.isValidId(id)) return res.status(400).json({ error: "Bad account id." });
+  const info = tenant.run(id, () => ghl.connectInfo());
+  if (!info.locationId) return res.json({ configured: false });
+  res.json({ configured: true, url: `https://app.gohighlevel.com/v2/location/${info.locationId}/marketing/social-planner/` });
 });
 
 // Step into a customer's account: same browser, new signed session that says
@@ -632,7 +657,7 @@ app.delete("/api/workflows/:id", (req, res) => {
 });
 
 // Test-fire a workflow with a sample payload (clearly labelled in the log).
-app.post("/api/workflows/:id/test", (req, res) => {
+app.post("/api/workflows/:id/test", async (req, res) => {
   const workflows = store.getCol("workflows");
   const wf = workflows.find((w) => w.id === req.params.id);
   if (!wf) return res.status(404).json({ error: "Workflow not found." });
@@ -641,7 +666,7 @@ app.post("/api/workflows/:id/test", (req, res) => {
   const wasEnabled = wf.enabled;
   wf.enabled = true;
   store.saveCol("workflows", workflows);
-  events.emit(wf.trigger, payload);
+  await events.emit(wf.trigger, payload);
   const after = store.getCol("workflows");
   const updated = after.find((w) => w.id === wf.id);
   updated.enabled = wasEnabled;
@@ -775,6 +800,41 @@ app.put("/api/budget", (req, res) => {
 });
 
 // ---- GoHighLevel publishing ---------------------------------------------------
+// ---- media studio ------------------------------------------------------------
+
+const media = require("./src/media");
+
+app.get("/api/media", (_req, res) => res.json(media.list()));
+
+// Stream a generated file to the signed-in owner (thumbnails, previews).
+app.get("/api/media/file/:name", (req, res) => {
+  const p = media.filePath(req.params.name);
+  if (!p) return res.status(404).json({ error: "No such file." });
+  res.setHeader("Content-Type", p.endsWith(".mp4") ? "video/mp4" : "image/png");
+  res.sendFile(p);
+});
+
+// Make an image or video by hand from the dashboard (the AI uses its tools).
+app.post("/api/media/image", async (req, res) => {
+  try { res.json(await media.generateImage(req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/media/video", async (req, res) => {
+  try { res.json(await media.generateVideo(req.body || {})); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// The one fast path for Stone: where to open this account's publishing engine
+// to link socials. Admin-only — customers never see the engine.
+app.get("/api/ghl/connect-info", adminOnly, (req, res) => {
+  const info = ghl.connectInfo();
+  if (!info.locationId) return res.json({ configured: false });
+  res.json({
+    configured: true,
+    url: `https://app.gohighlevel.com/v2/location/${info.locationId}/marketing/social-planner/`,
+  });
+});
+
 app.get("/api/ghl/health", async (_req, res) => {
   res.json(await ghl.health());
 });
