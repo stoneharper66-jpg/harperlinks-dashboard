@@ -88,10 +88,34 @@
           s: "No contact in a while — worth a nudge.", go: "crm", cta: "Open CRM" });
         if (!on.length) needs.push({
           t: "Your AI team is switched off",
-          s: "Nobody is working. Turn on the employees you want running.", go: "employees", cta: "Switch them on" });
+          s: "Nobody is working. One click puts every ready employee on duty, in supervised mode.",
+          cta: "Put my team to work",
+          fn: function (btn) {
+            btn.disabled = true; btn.textContent = "Starting them up…";
+            var ready = emps.filter(function (e) { return e.ready && !e.enabled; });
+            Promise.all(ready.map(function (e) {
+              return HL.post("/api/employees/" + e.id, { enabled: true, mode: "supervised" }, "PATCH");
+            })).then(function () {
+              HL.toast(ready.length + " employees are now on duty");
+              HL.navigate();
+            });
+          } });
         if (!profile.configured) needs.push({
           t: "The team hasn't learned your business yet",
-          s: "Give them your website address and they'll pick up your services and voice.", go: "settings", cta: "Add it" });
+          s: "Give them your website address — they'll read it and pick up your services, voice and audience.",
+          cta: "Teach them",
+          fn: function () {
+            var body = HL.el("div");
+            var url = HL.input("https://yourbusiness.com.au");
+            body.appendChild(HL.el("p", "sec-intro", "Paste your website address. The team reads it once and every post, reply and report comes out in your voice."));
+            body.appendChild(HL.field("Your website", url));
+            HL.modal("Introduce your business", body, function () {
+              return HL.post("/api/ingest", { url: url.value.trim() }).then(function (out) {
+                HL.toast("Learned it — " + ((out.profile && out.profile.name) || "profile saved"));
+                HL.navigate();
+              });
+            }, "Let them read it");
+          } });
 
         if (needs.length) {
           var att = HL.el("section", "cmd-att");
@@ -103,7 +127,9 @@
             m.appendChild(HL.el("div", "att-s", n.s));
             row.appendChild(m);
             var b = HL.el("button", "btn ghost sm", n.cta);
-            b.addEventListener("click", function () { location.hash = "#/" + n.go; });
+            b.addEventListener("click", function () {
+              if (n.fn) n.fn(b); else location.hash = "#/" + n.go;
+            });
             row.appendChild(b);
             att.appendChild(row);
           });

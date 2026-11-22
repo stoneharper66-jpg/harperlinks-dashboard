@@ -1353,3 +1353,7 @@ body.imp-mode .os{padding-top:38px}
 
 .cmd-ask{background:#fff;border:1px solid var(--border);border-radius:18px;padding:18px 20px}
 .cmd-ask .cc-chat{min-height:0}
+.q-approve{background:rgba(31,164,92,.1);color:#157A43;border:1px solid rgba(31,164,92,.3);
+  border-radius:8px;padding:4px 10px;font-size:12px;font-weight:650;cursor:pointer;transition:background .15s}
+.q-approve:hover{background:rgba(31,164,92,.18)}
+.q-approve:disabled{opacity:.6;cursor:default}

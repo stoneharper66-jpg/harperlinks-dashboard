@@ -451,6 +451,7 @@
   }
 
   function buildQueue(refresh) {
+    var approveCount = 0;
     var panel = HL.panel("Publishing queue", "");
     var headBtn = HL.el("button", "btn sm", "+ New post");
     headBtn.addEventListener("click", function () { postEditor(null, refresh); });
@@ -482,6 +483,19 @@
       var st = HL.el("span", "pill-st " + p.status, p.status);
       item.appendChild(st);
       var acts = item.querySelector(".q-actions");
+      if (p.status === "draft") {
+        // supervision in one click: the AI wrote it, the owner approves it
+        var ok = HL.el("button", "q-approve", "Approve & schedule");
+        ok.addEventListener("click", function () {
+          ok.disabled = true; ok.textContent = "Scheduling…";
+          var slot = "tomorrow " + (9 + (approveCount * 2) % 8) + "am";
+          approveCount++;
+          HL.post("/api/posts/" + p.id, { scheduledFor: slot }, "PATCH")
+            .then(function () { HL.toast("Approved — going out " + slot); refresh(); })
+            .catch(function (e) { HL.toast(e.message, true); refresh(); });
+        });
+        acts.appendChild(ok);
+      }
       if (p.status !== "published") {
         var edit = HL.el("button", null, "Edit");
         edit.addEventListener("click", function () { postEditor(p, refresh); });
