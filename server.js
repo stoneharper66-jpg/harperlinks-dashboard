@@ -25,6 +25,24 @@ app.set("trust proxy", 1);
 const PORT = process.env.PORT || 4700;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
+// Stripe signs the exact bytes it sent, so this one route gets the raw body
+// and must be mounted before the JSON parser consumes it.
+app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  const stripeHook = require("./src/stripe-hook");
+  try {
+    const out = await stripeHook.handle(
+      req.body.toString("utf8"),
+      req.headers["stripe-signature"],
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+    res.status(out.status).json(out.body);
+  } catch (e) {
+    console.error("stripe webhook error:", e.message);
+    // 500 tells Stripe to retry — better than silently losing a customer
+    res.status(500).json({ error: "handler failed" });
+  }
+});
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
