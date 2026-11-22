@@ -840,7 +840,7 @@ app.get("/api/integrations", async (_req, res) => {
 
   res.json([
     { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Connected and managed by the HarperLinks team." },
-    Object.assign({ id: "instagram", name: "Instagram", desc: "Live publishing & DMs." }, social("instagram", "instagram")),
+    Object.assign({ id: "instagram", name: "Instagram", desc: "Publish posts to your feed." }, social("instagram", "instagram")),
     Object.assign({ id: "facebook", name: "Facebook", desc: "Page posts & Messenger." }, social("facebook", "facebook")),
     Object.assign({ id: "tiktok", name: "TikTok", desc: "Video publishing." }, social("tiktok", "tiktok", "tiktok-business")),
     Object.assign({ id: "linkedin", name: "LinkedIn", desc: "Company page publishing." }, social("linkedin", "linkedin")),
