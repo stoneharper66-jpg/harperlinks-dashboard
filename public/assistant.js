@@ -146,20 +146,35 @@
         y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - h - 8)),
       };
     }
+    // Put the panel beside him, always fully on screen: it takes whichever
+    // side has more room and is told how tall it may be, so it can never be
+    // cut off at the top or bottom of the window.
+    function placePanel(p) {
+      var fw = fab.offsetWidth || 58, fh = fab.offsetHeight || 68, GAP = 12, EDGE = 8;
+      var leftHalf = p.x < window.innerWidth / 2;
+      panel.classList.toggle("flip", leftHalf);
+      var pw = panel.offsetWidth || 370;
+      var px = leftHalf ? p.x : (p.x + fw - pw);
+      panel.style.left = Math.min(Math.max(EDGE, px), Math.max(EDGE, window.innerWidth - pw - EDGE)) + "px";
+
+      var roomBelow = window.innerHeight - (p.y + fh) - GAP - EDGE;
+      var roomAbove = p.y - GAP - EDGE;
+      var below = roomBelow >= roomAbove;
+      panel.style.maxHeight = Math.max(220, Math.min(500, below ? roomBelow : roomAbove)) + "px";
+      var ph = panel.offsetHeight || 320;
+      var top = below ? (p.y + fh + GAP) : (p.y - ph - GAP);
+      panel.style.top = Math.min(Math.max(EDGE, top), Math.max(EDGE, window.innerHeight - ph - EDGE)) + "px";
+    }
     function place(x, y) {
       var p = clamp(x, y);
       fab.style.left = p.x + "px";
       fab.style.top = p.y + "px";
       fab.style.right = "auto";
       fab.style.bottom = "auto";
-      // panel opens on whichever side has room
-      var leftHalf = p.x < window.innerWidth / 2;
-      panel.classList.toggle("flip", leftHalf);
-      var px = leftHalf ? p.x : Math.max(8, p.x + fab.offsetWidth - panel.offsetWidth);
-      var below = p.y < window.innerHeight / 2;
-      panel.style.left = Math.min(px, Math.max(8, window.innerWidth - panel.offsetWidth - 8)) + "px";
-      panel.style.top = below ? (p.y + fab.offsetHeight + 12) + "px"
-                              : Math.max(8, p.y - panel.offsetHeight - 12) + "px";
+      // Measuring the panel forces a layout. Doing that on every pointer move
+      // while he's being dragged is what made this feel sticky — so only do
+      // it when the panel is actually open.
+      if (panel.classList.contains("open")) placePanel(p);
       return p;
     }
     var saved = null;
@@ -449,6 +464,7 @@
       var opening = !panel.classList.contains("open");
       if (opening) {
         place(fab.offsetLeft, fab.offsetTop);
+        placePanel(clamp(fab.offsetLeft, fab.offsetTop));
         panel.classList.add("open");
         fab.classList.add("active");
         if (!greeted) {
