@@ -7,6 +7,63 @@
   var HL = window.HL;
   var POS_KEY = "hl-fab-pos";
 
+  var ART = [
+    "............PPPP............",
+    "............PPPP............",
+    ".............BB.............",
+    "....BBBBBBBBBBBBBBBBBBBB....",
+    "...BLLBBBBBBBBBBBBBBBBBBB...",
+    "..BLBBSSSSSSSSSSSSSSSSBBBB..",
+    "PPBBBBSSSCCSSSSSSSSSSSBBBBPP",
+    "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
+    "PPBBBBSSSSSCCSSSSSSSSSBBBBPP",
+    "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
+    "..BBBBSSSCCSSSSUUUSSSSBBBB..",
+    "..BBBBBBBBBBBBBBBBBBBBBBBB..",
+    "...BBBBBBBBBBBBBBBBBBBBBB...",
+    "....DDDDDDDDDDDDDDDDDDDD....",
+    "............BBBB............",
+    "........BBBBBBBBBBBB........",
+    ".....BBBBBBBBBBBBBBBBBB.....",
+    ".....BBB.BBBPPPPBBB.BBB.....",
+    ".....BBB.BBBPPPPBBB.BBB.....",
+    ".....BBB.BBBPPPPBBB.BBB.....",
+    "......BB.BBBBBBBBBB.BB......",
+    ".........BBBBBBBBBB.........",
+    ".........BBBBBBBBBB.........",
+    ".........DBBBBBBBBD.........",
+    "..........BBB..BBB..........",
+    "..........BBB..BBB..........",
+    ".........BBBB..BBBB.........",
+    ".........DDDD..DDDD........."
+  ];
+
+  var INK = { B: "#5B4BE8", L: "#9A90F5", D: "#3E2FC7", S: "#0E1430", C: "#5FE9F7", U: "#5FE9F7", P: "#E84393" };
+
+  // One pixel body, many coats of paint — the AI Employees page uses this
+  // to give every employee their own face in their own colour.
+  var TEAM_PAL = {
+    social:      { B: "#E84393", L: "#F27DB8", D: "#BE2A72", P: "#3E7BEA" }, // Sage
+    sales:       { B: "#F59E0B", L: "#FBC55A", D: "#C57F07", P: "#E84393" }, // Flynn
+    receptionist:{ B: "#14B8A6", L: "#5BD6C6", D: "#0E8A7B", P: "#E84393" }, // Harper
+    manager:     { B: "#8B5CF6", L: "#B39BF8", D: "#6A3ED2", P: "#E84393" }, // Darcy
+    support:     { B: "#0EA5E9", L: "#67CDF5", D: "#0777AE", P: "#E84393" }, // Riley
+    web:         { B: "#EF4444", L: "#F79090", D: "#BE2626", P: "#3E7BEA" }, // Indi
+  };
+  HL.botFace = function (id) {
+    var ink = Object.assign({}, INK, TEAM_PAL[id] || {});
+    var out = "";
+    ART.forEach(function (row, y) {
+      for (var x = 0; x < row.length; x++) {
+        var ch = row[x];
+        if (ch === ".") continue;
+        out += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + ink[ch] + '"/>';
+      }
+    });
+    return '<svg viewBox="0 0 28 28" shape-rendering="crispEdges" aria-hidden="true">' + out + "</svg>";
+  };
+
+
   HL.mountAssistant = function () {
     if (document.getElementById("hlFab")) return;
 
@@ -19,37 +76,7 @@
     /* The mascot: a pixel robot drawn cell-by-cell from this map, so it stays
        crisp at any size and we can animate parts (arm wave, cursor blink).
        B blue · L highlight · D shade · S screen · C cyan · U blinking cursor */
-    var ART = [
-      "............PPPP............",
-      "............PPPP............",
-      ".............BB.............",
-      "....BBBBBBBBBBBBBBBBBBBB....",
-      "...BLLBBBBBBBBBBBBBBBBBBB...",
-      "..BLBBSSSSSSSSSSSSSSSSBBBB..",
-      "PPBBBBSSSCCSSSSSSSSSSSBBBBPP",
-      "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
-      "PPBBBBSSSSSCCSSSSSSSSSBBBBPP",
-      "PPBBBBSSSSCCSSSSSSSSSSBBBBPP",
-      "..BBBBSSSCCSSSSUUUSSSSBBBB..",
-      "..BBBBBBBBBBBBBBBBBBBBBBBB..",
-      "...BBBBBBBBBBBBBBBBBBBBBB...",
-      "....DDDDDDDDDDDDDDDDDDDD....",
-      "............BBBB............",
-      "........BBBBBBBBBBBB........",
-      ".....BBBBBBBBBBBBBBBBBB.....",
-      ".....BBB.BBBPPPPBBB.BBB.....",
-      ".....BBB.BBBPPPPBBB.BBB.....",
-      ".....BBB.BBBPPPPBBB.BBB.....",
-      "......BB.BBBBBBBBBB.BB......",
-      ".........BBBBBBBBBB.........",
-      ".........BBBBBBBBBB.........",
-      ".........DBBBBBBBBD.........",
-      "..........BBB..BBB..........",
-      "..........BBB..BBB..........",
-      ".........BBBB..BBBB.........",
-      ".........DDDD..DDDD........."
-    ];
-    var INK = { B: "#3E7BEA", L: "#82ACF6", D: "#2E5BC2", S: "#0E1430", C: "#5FE9F7", U: "#5FE9F7", P: "#E84393" };
+
     function botSVG() {
       var body = "", arm = "", face = "";
       ART.forEach(function (row, y) {

@@ -144,7 +144,10 @@
           card.style.animationDelay = (0.05 * i) + "s";
 
           var top = HL.el("div", "emp-top");
-          var av = HL.el("div", "emp-av" + (e.enabled ? " on" : ""), e.name.charAt(0));
+          var av = HL.el("div", "emp-av emp-face" + (e.enabled ? " on" : ""));
+          // their own pixel face, in their own colour (falls back to the initial)
+          if (HL.botFace) av.innerHTML = HL.botFace(e.id);
+          else av.textContent = e.name.charAt(0);
           top.appendChild(av);
           var who = HL.el("div", "emp-who");
           who.appendChild(HL.el("div", "emp-name", e.name));

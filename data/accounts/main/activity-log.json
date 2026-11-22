@@ -226,5 +226,11 @@
     "type": "system",
     "message": "Nightly backup done — harperlinks-2026-11-21.tgz (9 KB), last 14 kept",
     "refId": null
+  },
+  {
+    "at": "2026-11-22T04:01:18.360Z",
+    "type": "system",
+    "message": "Nightly backup done — harperlinks-2026-11-22.tgz (9 KB), last 14 kept",
+    "refId": null
   }
 ]
