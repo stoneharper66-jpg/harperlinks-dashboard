@@ -22,107 +22,197 @@
     manager: "Darcy here — I watch the numbers. Ask what needs attention or what's coming up.",
   };
 
+  /* ================= COMMAND CENTRE =================
+     Answers four questions without a single click:
+       1. What has my AI done?          (the brief + activity)
+       2. What is it doing next?        (in flight)
+       3. What actually needs me?       (attention)
+       4. How is the business tracking? (numbers)
+     The framing matters: this page reports what the team DID, rather
+     than asking the owner what to do. The owner supervises; the AI works. */
   HL.pages.overview = {
     title: "Command Centre",
     render: function () {
-      var q = (location.hash.split("?")[1] || "");
-      var emp = (q.match(/emp=([a-z]+)/) || [])[1] || null;
-      return Promise.all([HL.api("/api/profile"), HL.api("/api/employees")]).then(function (res) {
-        var profile = res[0], emps = res[1];
-        var empDef = emp ? emps.find(function (e) { return e.id === emp; }) : null;
-        var root = HL.el("div", "cc");
+      return Promise.all([
+        HL.api("/api/profile"), HL.api("/api/employees"), HL.api("/api/report"),
+        HL.api("/api/activity"), HL.api("/api/tasks"), HL.api("/api/stats?days=7"),
+        HL.api("/api/posts"), HL.api("/api/appointments"), HL.api("/api/leads"),
+      ]).then(function (r) {
+        var profile = r[0], emps = r[1], report = r[2], activity = r[3],
+            tasks = r[4], stats = r[5], posts = r[6], appts = r[7], leads = r[8];
+        var facts = report.facts || {};
+        var totals = (stats && stats.totals) || {};
+        var root = HL.el("div", "cmd");
+        var on = emps.filter(function (e) { return e.enabled; });
 
-        var logo = document.createElement("img");
-        logo.src = "assets/logo-alpha.png";
-        logo.alt = "";
-        logo.className = "cc-logo";
-        logo.setAttribute("aria-hidden", "true");
-        root.appendChild(logo);
-
-        var hr = new Date().getHours();
-        var kick = hr < 12 ? "Good morning" : hr < 17 ? "Good arvo" : "Good evening";
-        root.appendChild(HL.el("div", "cc-kicker", kick + " — your AI team is on."));
-
-        var title = HL.el("h2", "cc-title");
-        if (empDef) {
-          title.innerHTML = "Talk to <span class=\"ttl-name\">" + HL.esc(empDef.name) + "</span>.";
-        } else if (profile.configured) {
-          title.innerHTML = "What should we get done, <span class=\"ttl-name\">" + HL.esc(profile.name.split(" ")[0]) + "</span>?";
-        } else {
-          title.innerHTML = "Where should we <span class=\"ttl-name\">start</span>?";
-        }
-        root.appendChild(title);
-
-        var bench = HL.el("div", "cc-bench");
-
-        if (empDef) {
-          var sub = HL.el("p", "cc-sub", EMP_GREETS[empDef.id] || "");
-          root.appendChild(sub);
-        }
-
-        var chat = HL.buildChat({
-          bare: true,
-          greet: null,
-          employee: emp || undefined,
-          bench: bench,
-          placeholder: profile.configured ? "Tell your AI team what to do…" : "Paste your website, or just ask…",
-          placeholders: profile.configured
-            ? ["Tell your AI team what to do…", "Plan next week's content…", "Book Jane in for Tuesday 2pm…", "Script me a TikTok…", "Remind me to chase invoices Friday…"]
-            : ["Paste your website, or just ask…", "Write me 5 posts for next week…", "Make me a TikTok video…", "Remind me to call Terry at 9am…"],
-          onFirstSend: function () { root.classList.add("engaged"); },
+        /* ---------- 1. THE BRIEF — what your team did, in its own words ---------- */
+        var brief = HL.el("section", "cmd-brief");
+        var bh = HL.el("div", "cb-head");
+        var face = HL.el("div", "cb-face");
+        if (HL.botFace) face.innerHTML = HL.botFace("manager");
+        bh.appendChild(face);
+        var who = HL.el("div", "cb-who");
+        who.appendChild(HL.el("b", null, "Darcy — your Business Manager"));
+        var prov = report.by === "claude" ? "written just now" :
+                   report.by === "rules" ? "summary from your live data" : "paused";
+        who.appendChild(HL.el("span", null, prov));
+        bh.appendChild(who);
+        var hello = HL.el("div", "cb-when", HL.greetWord ? HL.greetWord() : "Today");
+        bh.appendChild(hello);
+        brief.appendChild(bh);
+        var txt = HL.el("div", "cb-text");
+        (String(report.report || "").split(/\n\n+/).slice(0, 3)).forEach(function (para) {
+          if (para.trim()) txt.appendChild(HL.el("p", null, para.trim()));
         });
-
-        // chat + composer live in one column so the composer docks at the bottom
-        var main = HL.el("div", "cc-main");
-        main.appendChild(chat);
-        main.appendChild(chat.querySelector(".cc-compose"));
-        root.appendChild(main);
-
-        var sugs = HL.el("div", "cc-sugs");
-        var items = profile.configured
-          ? [
-              ["pen", "Plan my week's content"],
-              ["film", "Make me a TikTok video"],
-              ["cal", "What's my day look like?"],
-              ["bell", "Remind me to follow up new leads tomorrow 9am"],
-            ]
-          : [
-              ["globe", "Learn my business from my website"],
-              ["film", "Make me a TikTok video"],
-              ["bell", "Remind me to call Terry tomorrow 9am"],
-            ];
-        items.forEach(function (it) {
-          var b = HL.el("button", "cc-sug");
-          b.innerHTML = SUG_ICONS[it[0]] + "<span>" + HL.esc(it[1]) + "</span>";
-          b.addEventListener("click", function () {
-            chat._send(it[1] === "Learn my business from my website" ? "Ingest my website" : it[1]);
+        brief.appendChild(txt);
+        if (report.by === "off") {
+          var fix = HL.el("button", "btn sm", "Switch Darcy on");
+          fix.addEventListener("click", function () {
+            HL.post("/api/employees/manager", { enabled: true }, "PATCH")
+              .then(function () { HL.toast("Darcy is on duty"); HL.navigate(); });
           });
-          sugs.appendChild(b);
-        });
-        if (empDef) sugs.style.display = "none";
-        root.appendChild(sugs);
+          brief.appendChild(fix);
+        }
+        root.appendChild(brief);
 
-        // the team, linked — glowing when active; click to talk to that bot
-        var strip = HL.el("div", "cc-team");
-        emps.forEach(function (e, ei) {
-          var cell = HL.el("div", "cc-team-cell");
-          cell.style.animationDelay = (0.06 * ei) + "s";
-          var b = HL.el("button", "cc-team-m" + (e.enabled ? " on" : "") + (emp === e.id ? " sel" : ""));
-          b.title = e.name + " — " + e.role + (e.enabled ? "" : " (off)");
-          b.innerHTML = '<span class="tm-ring"></span><span class="tm-init">' + HL.esc(e.name.charAt(0)) + "</span>";
-          b.addEventListener("click", function () { location.hash = "#/overview?emp=" + e.id; });
-          cell.appendChild(b);
-          var who = HL.el("span", "tm-name", e.name);
-          cell.appendChild(who);
-          cell.appendChild(HL.el("span", "tm-role", e.role));
-          strip.appendChild(cell);
-        });
-        var stripWrap = HL.el("div", "cc-teamwrap");
-        stripWrap.appendChild(HL.el("div", "cc-teamlabel", "Your AI team"));
-        stripWrap.appendChild(strip);
-        root.appendChild(stripWrap);
+        /* ---------- 2. NEEDS YOU — only appears when something is genuinely wrong ---------- */
+        var needs = [];
+        if (facts.overdueFollowUps) needs.push({
+          t: facts.overdueFollowUps + " follow-up" + (facts.overdueFollowUps > 1 ? "s are" : " is") + " overdue",
+          s: "Flynn drafted these — they need your approval to go out.", go: "crm", cta: "Review leads" });
+        if (facts.drafts) needs.push({
+          t: facts.drafts + " post" + (facts.drafts > 1 ? "s are" : " is") + " waiting on you",
+          s: "Sage wrote them. Approve to schedule, or ask for changes.", go: "social", cta: "Review drafts" });
+        if (facts.staleLeads) needs.push({
+          t: facts.staleLeads + " lead" + (facts.staleLeads > 1 ? "s have" : " has") + " gone quiet",
+          s: "No contact in a while — worth a nudge.", go: "crm", cta: "Open CRM" });
+        if (!on.length) needs.push({
+          t: "Your AI team is switched off",
+          s: "Nobody is working. Turn on the employees you want running.", go: "employees", cta: "Switch them on" });
+        if (!profile.configured) needs.push({
+          t: "The team hasn't learned your business yet",
+          s: "Give them your website address and they'll pick up your services and voice.", go: "settings", cta: "Add it" });
 
-        root.appendChild(bench);
+        if (needs.length) {
+          var att = HL.el("section", "cmd-att");
+          att.appendChild(HL.el("h3", "cmd-h", "Needs you"));
+          needs.slice(0, 4).forEach(function (n) {
+            var row = HL.el("div", "att-row");
+            var m = HL.el("div", "att-main");
+            m.appendChild(HL.el("div", "att-t", n.t));
+            m.appendChild(HL.el("div", "att-s", n.s));
+            row.appendChild(m);
+            var b = HL.el("button", "btn ghost sm", n.cta);
+            b.addEventListener("click", function () { location.hash = "#/" + n.go; });
+            row.appendChild(b);
+            att.appendChild(row);
+          });
+          root.appendChild(att);
+        }
+
+        /* ---------- 3. THE NUMBERS ---------- */
+        var kpi = HL.el("section", "cmd-kpi");
+        kpi.appendChild(HL.stat("New leads", totals.leads || 0, (totals.leadsNew || 0) + " this week"));
+        kpi.appendChild(HL.stat("Won", totals.won || 0, (totals.conversion || 0) + "% conversion"));
+        kpi.appendChild(HL.stat("Content queued", facts.scheduledAhead || 0, (facts.publishedToday || 0) + " went out today"));
+        kpi.appendChild(HL.stat("Appointments", totals.upcoming || 0, "coming up"));
+        kpi.appendChild(HL.stat("Team on duty", on.length + "/" + emps.length, on.length ? "working now" : "all paused"));
+        root.appendChild(kpi);
+
+        /* ---------- 4. TWO COLUMNS: the team, and what they did ---------- */
+        var cols = HL.el("section", "cmd-cols");
+
+        /* -- who's working -- */
+        var teamCol = HL.el("div", "cmd-col");
+        teamCol.appendChild(HL.el("h3", "cmd-h", "Your AI team"));
+        var teamList = HL.el("div", "cmd-team");
+        var MODE_WORD = { assisted: "asks you first", supervised: "escalates big calls", autonomous: "runs on its own" };
+        emps.forEach(function (e) {
+          var row = HL.el("div", "tmrow" + (e.enabled ? " on" : "") + (e.ready ? "" : " locked"));
+          var av = HL.el("div", "tmrow-face");
+          if (HL.botFace) av.innerHTML = HL.botFace(e.id);
+          row.appendChild(av);
+          var mid = HL.el("div", "tmrow-mid");
+          mid.appendChild(HL.el("div", "tmrow-name", e.name));
+          var sub = !e.ready ? (e.needs && e.needs[0] ? "Needs " + e.needs[0] : "Setup needed")
+                  : e.enabled ? (MODE_WORD[e.mode] || e.mode)
+                  : "Paused";
+          mid.appendChild(HL.el("div", "tmrow-sub", e.role + " · " + sub));
+          row.appendChild(mid);
+          row.appendChild(HL.el("span", "tmrow-dot" + (e.enabled && e.ready ? " live" : e.ready ? "" : " lock")));
+          row.addEventListener("click", function () { location.hash = "#/employees"; });
+          teamList.appendChild(row);
+        });
+        teamCol.appendChild(teamList);
+        cols.appendChild(teamCol);
+
+        /* -- what the team actually did -- */
+        var actCol = HL.el("div", "cmd-col");
+        var ah = HL.el("h3", "cmd-h", "What your team did");
+        actCol.appendChild(ah);
+        var feed = HL.el("div", "cmd-feed");
+        if (!activity.length) {
+          feed.appendChild(HL.emptyState("", "Nothing yet — every action your AI takes is logged here."));
+        } else {
+          activity.slice(0, 9).forEach(function (a) {
+            var row = HL.el("div", "fd-row");
+            row.appendChild(HL.el("span", "fd-dot " + (a.type || "")));
+            var m = HL.el("div", "fd-main");
+            m.appendChild(HL.el("div", "fd-msg", a.message));
+            m.appendChild(HL.el("div", "fd-time", HL.fmtWhen(a.at)));
+            row.appendChild(m);
+            feed.appendChild(row);
+          });
+        }
+        actCol.appendChild(feed);
+        cols.appendChild(actCol);
+        root.appendChild(cols);
+
+        /* ---------- 5. IN FLIGHT — what happens next, without being asked ---------- */
+        var upcoming = [];
+        posts.filter(function (p) { return p.status === "scheduled" && p.scheduledAt; })
+          .sort(function (a, b) { return new Date(a.scheduledAt) - new Date(b.scheduledAt); })
+          .slice(0, 3).forEach(function (p) {
+            upcoming.push({ when: p.scheduledAt, kind: "post", who: "Sage",
+              what: p.platform + " · " + p.content.slice(0, 58) + (p.content.length > 58 ? "…" : "") });
+          });
+        appts.filter(function (a) { return new Date(a.startsAt) > new Date(); })
+          .sort(function (a, b) { return new Date(a.startsAt) - new Date(b.startsAt); })
+          .slice(0, 3).forEach(function (a) {
+            upcoming.push({ when: a.startsAt, kind: "appt", who: "Harper",
+              what: a.service + " with " + a.customer_name });
+          });
+        (tasks || []).filter(function (t) { return t.status !== "done"; }).slice(0, 3).forEach(function (t) {
+          upcoming.push({ when: t.dueAt, kind: "task", who: "You", what: t.what });
+        });
+        upcoming.sort(function (a, b) {
+          return new Date(a.when || "2999-01-01") - new Date(b.when || "2999-01-01");
+        });
+
+        var flight = HL.el("section", "cmd-flight");
+        flight.appendChild(HL.el("h3", "cmd-h", "Happening next"));
+        var fl = HL.el("div", "cmd-flightlist");
+        if (!upcoming.length) {
+          fl.appendChild(HL.emptyState("", "Nothing scheduled. Ask the team for a week of content and it'll fill up."));
+        } else {
+          upcoming.slice(0, 6).forEach(function (u) {
+            var row = HL.el("div", "ufrow");
+            row.appendChild(HL.el("span", "uf-kind " + u.kind, u.kind === "post" ? "Post" : u.kind === "appt" ? "Booking" : "Task"));
+            var m = HL.el("div", "uf-main");
+            m.appendChild(HL.el("div", "uf-what", u.what));
+            m.appendChild(HL.el("div", "uf-meta", (u.when ? HL.fmtWhen(u.when) : "no date") + " · " + u.who));
+            row.appendChild(m);
+            fl.appendChild(row);
+          });
+        }
+        flight.appendChild(fl);
+        root.appendChild(flight);
+
+        /* ---------- 6. ASK — secondary now, not the whole page ---------- */
+        var ask = HL.el("section", "cmd-ask");
+        ask.appendChild(HL.el("h3", "cmd-h", "Tell the team what you need"));
+        ask.appendChild(HL.buildChat({ bare: true, greet: null }));
+        root.appendChild(ask);
 
         return root;
       });
