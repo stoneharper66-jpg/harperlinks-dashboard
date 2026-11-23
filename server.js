@@ -12,7 +12,9 @@ const store = require("./src/store");
 const scheduler = require("./src/scheduler");
 const employees = require("./src/employees");
 const events = require("./src/events");
-const { ingestWebsite } = require("./src/ingest");
+const ingest = require("./src/ingest");
+const { ingestWebsite } = ingest;
+const planner = require("./src/planner");
 const budget = require("./src/budget");
 const ghl = require("./src/ghl");
 const website = require("./src/website");
@@ -490,13 +492,41 @@ app.post("/api/reset", (req, res) => {
 
 // ---- profile / knowledge ------------------------------------------------------
 
+// Reading a whole site takes a minute, so this answers straight away and the
+// dashboard watches /api/scan. Holding the request open just means a spinner
+// that can't say anything useful — and a gateway timeout on a slow site.
 app.post("/api/ingest", async (req, res) => {
-  try {
-    const profile = await ingestWebsite((req.body || {}).url);
-    res.json({ ok: true, profile });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
+  const url = (req.body || {}).url;
+  const accountId = tenant.current();
+  const scan = ingest.getScan();
+  if (scan.status === "crawling" || scan.status === "thinking") {
+    return res.status(409).json({ ok: false, error: "A scan is already running." });
   }
+  if ((req.body || {}).wait) {
+    try { return res.json({ ok: true, profile: await ingestWebsite(url) }); }
+    catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  }
+  res.json({ ok: true, started: true });
+  tenant.run(accountId, () => {
+    ingestWebsite(url)
+      .then((profile) => planner.onboard(profile).catch((e) => console.error("auto-plan:", e.message)))
+      .catch((e) => console.error("ingest:", e.message));
+  });
+});
+
+// What the scan is doing right now — polled by the dashboard while it runs.
+app.get("/api/scan", (_req, res) => res.json({ scan: ingest.getScan(), plan: planner.getPlan() }));
+
+// Plan (or re-plan) a month of content on demand, without re-reading the site.
+app.post("/api/plan", (req, res) => {
+  const profile = store.getProfile();
+  if (!profile.configured) return res.status(400).json({ error: "Read the business's website first." });
+  const accountId = tenant.current();
+  res.json({ ok: true, started: true });
+  tenant.run(accountId, () => {
+    planner.onboard(profile, { count: Number((req.body || {}).count) || undefined })
+      .catch((e) => console.error("plan:", e.message));
+  });
 });
 
 app.get("/api/profile", (_req, res) => res.json(store.getProfile()));

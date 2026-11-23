@@ -116,9 +116,7 @@ async function runAction(action, event, payload, workflow) {
       if (post) {
         post.mediaId = img.id;
         post.mediaFile = img.file;
-        if (process.env.PUBLIC_BASE_URL) {
-          post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${img.file}`;
-        }
+        post.mediaUrl = require("./media").publicUrl(img.file);
         store.savePosts(posts);
       }
       store.logActivity("automation", `Workflow "${workflow.name}" designed an image${post ? " and attached it to the draft post" : ""}`, img.id);

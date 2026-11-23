@@ -155,7 +155,7 @@ function getActivity() {
 
 module.exports = {
   ROOT_DIR, ACCOUNTS_DIR,
-  readJson, writeJson, fileFor, listAccountIds,
+  readJson, writeJson, fileFor, listAccountIds, accountDir,
   getGlobal, saveGlobal,
   getCol, saveCol, newId,
   getProfile, saveProfile,

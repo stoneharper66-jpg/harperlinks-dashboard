@@ -202,4 +202,23 @@ async function generateVideo({ slides, style, format }) {
   return entry;
 }
 
-module.exports = { generateImage, generateVideo, list, filePath, FORMATS, STYLES };
+/**
+ * The public URL a platform can fetch this file from.
+ *
+ * GoHighLevel pulls media by URL, so a file with no reachable address never
+ * reaches Instagram — it just silently publishes as a bare caption. This used
+ * to depend solely on PUBLIC_BASE_URL being set by hand, which it usually
+ * wasn't. Railway and Render both publish their own hostname, so use those
+ * when nobody has configured one.
+ */
+function publicUrl(file) {
+  const base =
+    process.env.PUBLIC_BASE_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN && `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`) ||
+    process.env.RENDER_EXTERNAL_URL ||
+    "";
+  if (!base) return null;   // running locally — platforms can't reach us
+  return `${base.replace(/\/$/, "")}/media/${require("./tenant").current()}/${file}`;
+}
+
+module.exports = { generateImage, generateVideo, list, filePath, publicUrl, FORMATS, STYLES };

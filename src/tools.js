@@ -655,7 +655,7 @@ function makeHandlers(base = dt.now()) {
           const post = findPost(posts, input.attach_to);
           if (post) {
             post.mediaId = img.id; post.mediaFile = img.file;
-            if (process.env.PUBLIC_BASE_URL) post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${img.file}`;
+            post.mediaUrl = require("./media").publicUrl(img.file);
             store.savePosts(posts);
             attached = ` Attached to post ${post.id} — it'll upload with the post when it publishes.`;
           } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
@@ -675,7 +675,7 @@ function makeHandlers(base = dt.now()) {
           const post = findPost(posts, input.attach_to);
           if (post) {
             post.mediaId = vid.id; post.mediaFile = vid.file; post.isVideo = true;
-            if (process.env.PUBLIC_BASE_URL) post.mediaUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${require("./tenant").current()}/${vid.file}`;
+            post.mediaUrl = require("./media").publicUrl(vid.file);
             store.savePosts(posts);
             attached = ` Attached to post ${post.id}.`;
           } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
