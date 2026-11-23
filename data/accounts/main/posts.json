@@ -31,12 +31,14 @@
       "filmmaking"
     ],
     "isVideo": false,
-    "status": "scheduled",
+    "status": "failed",
     "scheduledAt": "2026-11-23T01:00:00.000Z",
     "createdAt": "2026-11-18T04:21:02.746Z",
     "publishedAt": null,
     "simulated": true,
-    "createdBy": "chat"
+    "createdBy": "chat",
+    "failedAt": "2026-11-23T02:03:47.709Z",
+    "failureReason": "No instagram account connected in GHL's Social Planner. Connect one there and it'll publish next time."
   },
   {
     "id": "post_mwlm5xgf3",

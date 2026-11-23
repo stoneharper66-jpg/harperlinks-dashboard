@@ -1040,7 +1040,10 @@ app.get("/api/stats", (req, res) => {
 
 // Daily report: written by Claude in live mode, deterministic from real data otherwise.
 // This is Darcy's job — switched off means no report.
-app.get("/api/report", async (_req, res) => {
+// Darcy's prose comes from Claude, which takes seconds. The Command Centre asks
+// for ?quick=1 first so the page can paint immediately off the same facts, then
+// asks again without it and swaps the prose in when it lands.
+app.get("/api/report", async (req, res) => {
   const darcy = employees.getState("manager");
   if (!darcy.enabled) {
     return res.json({ report: "Darcy (your Business Manager) is switched off — enable them in AI Employees and the daily report comes back.", facts: null, by: "off" });
@@ -1061,7 +1064,7 @@ app.get("/api/report", async (_req, res) => {
     upcomingAppts: appts.filter((a) => a.status === "booked" && new Date(a.startsAt) > now && new Date(a.startsAt) < new Date(now.getTime() + 7 * 86400e3)).length,
   };
 
-  if (engine.mode() === "live") {
+  if (engine.mode() === "live" && !req.query.quick) {
     try {
       const Anthropic = require("@anthropic-ai/sdk");
       const client = new Anthropic();

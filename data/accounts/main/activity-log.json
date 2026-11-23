@@ -232,5 +232,35 @@
     "type": "system",
     "message": "Nightly backup done — harperlinks-2026-11-22.tgz (9 KB), last 14 kept",
     "refId": null
+  },
+  {
+    "at": "2026-11-23T02:03:47.227Z",
+    "type": "auth",
+    "message": "Admin password reset for harperlinksteam@gmail.com via host recovery vars",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T02:03:47.709Z",
+    "type": "failed",
+    "message": "Couldn't publish instagram post — No instagram account connected in GHL's Social Planner. Connect one there and it'll publish next time.",
+    "refId": "post_mwlm5xga2"
+  },
+  {
+    "at": "2026-11-23T02:04:07.373Z",
+    "type": "system",
+    "message": "Nightly backup done — harperlinks-2026-11-23.tgz (10 KB), last 14 kept",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T02:26:57.038Z",
+    "type": "auth",
+    "message": "Admin password reset for harperlinksteam@gmail.com via host recovery vars",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T02:28:10.844Z",
+    "type": "system",
+    "message": "Server error — listen EADDRINUSE: address already in use :::4700",
+    "refId": null
   }
 ]

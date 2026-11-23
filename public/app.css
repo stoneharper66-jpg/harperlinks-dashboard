@@ -551,8 +551,14 @@ button.back-link{background:none;border:none;cursor:pointer;font:inherit}
 /* page fade-in */
 .view>*{animation:pageFade .3s var(--ease-out) both}
 /* skeleton loading */
-.skel{border-radius:12px;background:linear-gradient(90deg,var(--card) 25%,#242737 50%,var(--card) 75%);background-size:200% 100%;animation:skel 1.2s linear infinite}
+/* A pale sweep on a pale card. The old mid-tone here was left over from the
+   dark theme and read as a black bar sliding across a white page. */
+.skel{border-radius:12px;border:1px solid var(--border);
+  background:linear-gradient(90deg,var(--card) 25%,rgba(10,109,216,.07) 50%,var(--card) 75%);
+  background-size:200% 100%;animation:skel 1.2s linear infinite}
 @keyframes skel{to{background-position:-200% 0}}
+/* Darcy's prose replacing the instant summary — a quiet fade, not a flash. */
+.cb-swap{animation:pageFade .28s var(--ease-out) both}
 
 /* responsive */
 @media(max-width:920px){

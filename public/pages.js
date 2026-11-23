@@ -34,7 +34,7 @@
     title: "Command Centre",
     render: function () {
       return Promise.all([
-        HL.api("/api/profile"), HL.api("/api/employees"), HL.api("/api/report"),
+        HL.api("/api/profile"), HL.api("/api/employees"), HL.api("/api/report?quick=1"),
         HL.api("/api/activity"), HL.api("/api/tasks"), HL.api("/api/stats?days=7"),
         HL.api("/api/posts"), HL.api("/api/appointments"), HL.api("/api/leads"),
       ]).then(function (r) {
@@ -65,6 +65,21 @@
           if (para.trim()) txt.appendChild(HL.el("p", null, para.trim()));
         });
         brief.appendChild(txt);
+        // The facts are already on screen. Darcy's own words take a few seconds
+        // longer, so they arrive on their own rather than holding the page up.
+        if (report.by === "rules" && HL.mode === "live") {
+          who.lastChild.textContent = "writing your brief…";
+          HL.api("/api/report").then(function (full) {
+            if (!full || full.by !== "claude" || !full.report) return;
+            if (!document.body.contains(txt)) return;   // they've navigated away
+            txt.innerHTML = "";
+            String(full.report).split(/\n\n+/).slice(0, 3).forEach(function (para) {
+              if (para.trim()) txt.appendChild(HL.el("p", null, para.trim()));
+            });
+            who.lastChild.textContent = "written just now";
+            txt.classList.add("cb-swap");
+          }).catch(function () { who.lastChild.textContent = "summary from your live data"; });
+        }
         if (report.by === "off") {
           var fix = HL.el("button", "btn sm", "Switch Darcy on");
           fix.addEventListener("click", function () {
