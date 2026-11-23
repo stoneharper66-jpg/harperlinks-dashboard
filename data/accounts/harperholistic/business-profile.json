@@ -1,0 +1,42 @@
+{
+  "configured": true,
+  "sourceUrl": "https://harperholistic.xyz/",
+  "ingestedAt": "2026-11-23T03:15:59.827Z",
+  "name": "HarperHolistic",
+  "businessType": "Healing inspiration card deck subscription",
+  "tagline": "Boundaries are my Love Language",
+  "services": [
+    "Boundaries are my Love Language card deck",
+    "Cancer Care Compassionate Communication cards",
+    "Momma's Earth Magick card deck",
+    "Guidebook, affirmations & journal",
+    "Weekly reflections",
+    "Personal messages from Gillian"
+  ],
+  "audience": "People on a personal healing journey seeking boundaries, grounding, and emotional support",
+  "tone": "compassionate, spiritual, nurturing",
+  "location": null,
+  "keywords": [
+    "healing cards",
+    "boundaries",
+    "affirmations",
+    "cancer care",
+    "rituals",
+    "intuition",
+    "journal",
+    "membership"
+  ],
+  "photos": [
+    "https://harperholistic.xyz/images/cards/card-07.webp",
+    "https://harperholistic.xyz/images/cards/card-12.webp",
+    "https://harperholistic.xyz/images/cards/back.webp",
+    "https://harperholistic.xyz/images/cancer-care/card-01.webp",
+    "https://harperholistic.xyz/images/earth-magick/card-01.webp"
+  ],
+  "pagesRead": [
+    {
+      "url": "https://harperholistic.xyz/",
+      "title": "HarperHolistic"
+    }
+  ]
+}

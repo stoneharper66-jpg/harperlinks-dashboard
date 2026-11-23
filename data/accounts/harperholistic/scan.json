@@ -1,0 +1,16 @@
+{
+  "status": "done",
+  "url": "https://harperholistic.xyz/",
+  "startedAt": "2026-11-23T03:15:54.809Z",
+  "pagesRead": 1,
+  "imagesFound": 5,
+  "step": "Learned HarperHolistic",
+  "visited": [
+    {
+      "url": "https://harperholistic.xyz/",
+      "title": "HarperHolistic"
+    }
+  ],
+  "error": null,
+  "finishedAt": "2026-11-23T03:15:59.828Z"
+}

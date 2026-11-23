@@ -580,16 +580,34 @@ app.patch("/api/posts/:id", (req, res) => {
   const posts = store.getPosts();
   const post = posts.find((p) => p.id === req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found." });
-  const { content, hashtags, scheduledFor, status } = req.body || {};
+  const { content, hashtags, scheduledFor, scheduledAt, status, platform, kind, engagement } = req.body || {};
   if (content) post.content = String(content).trim();
-  if (Array.isArray(hashtags)) post.hashtags = hashtags;
-  if (scheduledFor) {
-    const when = resolveWhen(scheduledFor, new Date());
-    if (!when || when <= new Date()) return res.status(400).json({ error: `Couldn't use the time "${scheduledFor}".` });
+  if (Array.isArray(hashtags)) post.hashtags = hashtags.map((h) => String(h).replace(/^#/, "").trim()).filter(Boolean).slice(0, 8);
+  if (platform && ["instagram", "facebook", "linkedin", "tiktok", "youtube"].includes(platform)) post.platform = platform;
+  if (kind) post.kind = String(kind).slice(0, 30);
+  if (scheduledFor || scheduledAt) {
+    // scheduledAt comes from the editor's date picker (exact ISO);
+    // scheduledFor is natural language from chat ("tomorrow 9am").
+    const when = scheduledAt ? new Date(scheduledAt) : resolveWhen(scheduledFor, new Date());
+    if (!when || isNaN(when) || when <= new Date()) {
+      return res.status(400).json({ error: `That time needs to be in the future.` });
+    }
     post.scheduledAt = when.toISOString();
     post.status = "scheduled";
   }
-  if (status === "cancelled" || status === "draft") post.status = status;
+  if (status === "cancelled" || status === "draft") {
+    post.status = status;
+    if (status === "draft") post.scheduledAt = null;   // "unschedule" means it
+  }
+  // Real numbers only — this is what the learning loop feeds on.
+  if (engagement && typeof engagement === "object") {
+    const clean = {};
+    ["likes", "comments", "shares", "clicks", "reach"].forEach((k) => {
+      const n = Number(engagement[k]);
+      if (Number.isFinite(n) && n >= 0) clean[k] = Math.round(n);
+    });
+    if (Object.keys(clean).length) post.engagement = Object.assign(post.engagement || {}, clean);
+  }
   store.savePosts(posts);
   res.json(post);
 });
@@ -884,6 +902,25 @@ app.get("/api/integrations", async (_req, res) => {
     { id: "shopify", name: "Shopify", desc: "Store data & customers.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
     { id: "wordpress", name: "WordPress", desc: "Push website edits live.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
   ]);
+});
+
+// ---- insights & competitors --------------------------------------------------
+
+// Cheap, cached connection state — the home page and chat read this instead of
+// hitting the publishing engine's API on every load.
+app.get("/api/connections", (_req, res) => res.json(ghl.linkedPlatforms()));
+
+app.get("/api/insights", (_req, res) => {
+  const insights = require("./src/insights");
+  res.json({ insights: insights.computeInsights(), competitors: insights.listCompetitors() });
+});
+
+app.post("/api/competitors", async (req, res) => {
+  try {
+    res.json({ ok: true, competitor: await require("./src/insights").researchCompetitor((req.body || {}).url) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ---- website ---------------------------------------------------------------

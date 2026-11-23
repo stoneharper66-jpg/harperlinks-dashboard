@@ -262,5 +262,11 @@
     "type": "system",
     "message": "Server error — listen EADDRINUSE: address already in use :::4700",
     "refId": null
+  },
+  {
+    "at": "2026-11-23T03:27:25.308Z",
+    "type": "system",
+    "message": "Server error — listen EADDRINUSE: address already in use :::4700",
+    "refId": null
   }
 ]

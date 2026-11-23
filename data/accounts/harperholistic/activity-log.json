@@ -46,5 +46,101 @@
     "type": "auth",
     "message": "stone harper (HarperLinks team) signed into this account to help out",
     "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.827Z",
+    "type": "ingested",
+    "message": "Read 1 page of HarperHolistic and found 5 photos",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.829Z",
+    "type": "employee",
+    "message": "Sage (Social Media Manager) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.829Z",
+    "type": "employee",
+    "message": "Sage's operating mode set to supervised",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.830Z",
+    "type": "employee",
+    "message": "Riley (Customer Support Agent) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.830Z",
+    "type": "employee",
+    "message": "Riley's operating mode set to supervised",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.830Z",
+    "type": "employee",
+    "message": "Flynn (Sales Agent) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.831Z",
+    "type": "employee",
+    "message": "Flynn's operating mode set to supervised",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.831Z",
+    "type": "employee",
+    "message": "Indi (Website Builder) activated",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:15:59.832Z",
+    "type": "employee",
+    "message": "Indi's operating mode set to supervised",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:17:28.382Z",
+    "type": "scheduled",
+    "message": "Scheduled instagram post for Tue, 24 Nov, 10:00 am",
+    "refId": "post_mwsp3flo1"
+  },
+  {
+    "at": "2026-11-23T03:17:28.384Z",
+    "type": "scheduled",
+    "message": "Scheduled facebook post for Wed, 25 Nov, 12:00 pm",
+    "refId": "post_mwsp3fls2"
+  },
+  {
+    "at": "2026-11-23T03:17:28.385Z",
+    "type": "scheduled",
+    "message": "Scheduled tiktok post for Fri, 27 Nov, 11:00 am",
+    "refId": "post_mwsp3flt3"
+  },
+  {
+    "at": "2026-11-23T03:17:51.562Z",
+    "type": "media",
+    "message": "Designed a square image — \"Boundaries are my love language\"",
+    "refId": "img_mwsp3xdn4"
+  },
+  {
+    "at": "2026-11-23T03:18:26.708Z",
+    "type": "media",
+    "message": "Produced a 8.9s story video — 4 slide(s), \"Pull one card...\"",
+    "refId": "vid_mwsp3xhm5"
+  },
+  {
+    "at": "2026-11-23T03:19:48.318Z",
+    "type": "content",
+    "message": "Sage planned 90 posts for HarperHolistic — scheduled across the month",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T03:32:12.138Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed into this account to help out",
+    "refId": null
   }
 ]

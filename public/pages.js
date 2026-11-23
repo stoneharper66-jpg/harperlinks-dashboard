@@ -37,13 +37,28 @@
         HL.api("/api/profile"), HL.api("/api/employees"), HL.api("/api/report?quick=1"),
         HL.api("/api/activity"), HL.api("/api/tasks"), HL.api("/api/stats?days=7"),
         HL.api("/api/posts"), HL.api("/api/appointments"), HL.api("/api/leads"),
+        HL.api("/api/connections").catch(function () { return null; }),
       ]).then(function (r) {
         var profile = r[0], emps = r[1], report = r[2], activity = r[3],
-            tasks = r[4], stats = r[5], posts = r[6], appts = r[7], leads = r[8];
+            tasks = r[4], stats = r[5], posts = r[6], appts = r[7], leads = r[8],
+            conn = r[9];
         var facts = report.facts || {};
         var totals = (stats && stats.totals) || {};
         var root = HL.el("div", "cmd");
         var on = emps.filter(function (e) { return e.enabled; });
+
+        /* ---------- 0. THE CHAT — front and centre, the original design ---------- */
+        var ask = HL.el("section", "cmd-ask top");
+        ask.appendChild(HL.buildChat({
+          bare: true, greet: null,
+          placeholders: [
+            "Write next week's posts…",
+            "Who's our biggest competitor?",
+            "What's working best this month?",
+            "Reschedule tomorrow's post to Friday…",
+          ],
+        }));
+        root.appendChild(ask);
 
         /* ---------- 1. THE BRIEF — what your team did, in its own words ---------- */
         var brief = HL.el("section", "cmd-brief");
@@ -92,6 +107,15 @@
 
         /* ---------- 2. NEEDS YOU — only appears when something is genuinely wrong ---------- */
         var needs = [];
+        // Connections come first: until the socials are linked, everything the
+        // team schedules publishes as a preview — the owner should know that
+        // before anything else on this page.
+        if (conn && (!conn.configured || !conn.platforms.length)) {
+          needs.push({
+            t: "Your socials aren't connected yet",
+            s: "The team still writes and schedules everything, but posts publish as previews until Instagram and Facebook are linked. The HarperLinks team connects them for you.",
+            go: "integrations", cta: "Connect accounts" });
+        }
         if (facts.overdueFollowUps) needs.push({
           t: facts.overdueFollowUps + " follow-up" + (facts.overdueFollowUps > 1 ? "s are" : " is") + " overdue",
           s: "Flynn drafted these — they need your approval to go out.", go: "crm", cta: "Review leads" });
@@ -181,7 +205,7 @@
           mid.appendChild(HL.el("div", "tmrow-sub", e.role + " · " + sub));
           row.appendChild(mid);
           row.appendChild(HL.el("span", "tmrow-dot" + (e.enabled && e.ready ? " live" : e.ready ? "" : " lock")));
-          row.addEventListener("click", function () { location.hash = "#/employees"; });
+          row.addEventListener("click", function () { location.hash = "#/employee?emp=" + e.id; });
           teamList.appendChild(row);
         });
         teamCol.appendChild(teamList);
@@ -248,12 +272,6 @@
         }
         flight.appendChild(fl);
         root.appendChild(flight);
-
-        /* ---------- 6. ASK — secondary now, not the whole page ---------- */
-        var ask = HL.el("section", "cmd-ask");
-        ask.appendChild(HL.el("h3", "cmd-h", "Tell the team what you need"));
-        ask.appendChild(HL.buildChat({ bare: true, greet: null }));
-        root.appendChild(ask);
 
         return root;
       });
@@ -333,7 +351,9 @@
 
           var acts = HL.el("div", "emp-acts");
           var chatB = HL.el("button", "btn ghost sm", "Talk to " + e.name);
-          chatB.addEventListener("click", function () { location.hash = "#/overview?emp=" + e.id; });
+          chatB.addEventListener("click", function () { location.hash = "#/employee?emp=" + e.id; });
+          top.style.cursor = "pointer";
+          top.addEventListener("click", function () { location.hash = "#/employee?emp=" + e.id; });
           acts.appendChild(chatB);
           var WORKSPACES = { social: "social", support: "inbox", receptionist: "phone", sales: "crm", web: "website", manager: "analytics" };
           var wsB = HL.el("button", "btn ghost sm", "Workspace");
@@ -344,6 +364,89 @@
           grid.appendChild(card);
         });
         root.appendChild(grid);
+        return root;
+      });
+    },
+  };
+
+  /* ================= ONE EMPLOYEE — their own office ================= */
+  var EMP_CHIPS = {
+    social: ["Write next week's posts", "What's performing best?", "Make me a TikTok video"],
+    support: ["What would you tell a customer who asks about prices?", "What can't you answer yet?"],
+    receptionist: ["What's booked this week?", "Book a test appointment tomorrow 10am"],
+    sales: ["Which leads are going cold?", "Draft a follow-up for my newest lead"],
+    web: ["How's our website looking?", "Research a competitor's site"],
+    manager: ["How's the business going?", "Who's our competition?", "What should we do differently?"],
+  };
+  var EMP_GREET = {
+    social: "I run your content — writing, pictures, the calendar, the lot. What do you want out there?",
+    support: "I answer your customers from what your business has actually said. Ask me anything they'd ask.",
+    receptionist: "I keep the diary. Bookings, availability, reminders — try me.",
+    sales: "I watch your pipeline so nothing goes cold. Want a look at your leads?",
+    web: "Your website's mine — I build it, change it, and keep it safe. What needs doing?",
+    manager: "I keep the whole operation honest — numbers, insights, the rest of the team. What do you want to know?",
+  };
+
+  HL.pages.employee = {
+    title: "AI Team",
+    render: function () {
+      var q = new URLSearchParams((location.hash.split("?")[1] || ""));
+      var id = q.get("emp") || "manager";
+      return HL.api("/api/employees").then(function (emps) {
+        var e = emps.find(function (x) { return x.id === id; }) || emps[0];
+        var root = HL.el("div", "emp-office");
+
+        /* -- hero: who they are, working state, controls -- */
+        var hero = HL.el("section", "empo-hero");
+        var av = HL.el("div", "empo-face" + (e.enabled ? " working" : ""));
+        if (HL.botFace) av.innerHTML = HL.botFace(e.id);
+        hero.appendChild(av);
+        var mid = HL.el("div", "empo-mid");
+        mid.appendChild(HL.el("h2", "empo-name", e.name));
+        mid.appendChild(HL.el("div", "empo-role", e.role));
+        var st = HL.el("div", "empo-state " + (e.enabled ? "ok" : e.ready ? "off" : "wait"),
+          e.enabled ? "On duty — working now" : e.ready ? "Paused" : "Needs " + ((e.needs || [])[0] || "setup"));
+        mid.appendChild(st);
+        hero.appendChild(mid);
+
+        var ctl = HL.el("div", "empo-ctl");
+        var modeSel = HL.select([
+          { value: "assisted", label: "Ask me first" },
+          { value: "supervised", label: "Tell me after" },
+          { value: "autonomous", label: "Just do it" },
+        ], e.mode);
+        modeSel.className = "select";
+        modeSel.addEventListener("change", function () {
+          HL.post("/api/employees/" + e.id, { mode: modeSel.value }, "PATCH")
+            .then(function () { HL.toast(e.name + " → " + modeSel.value); });
+        });
+        ctl.appendChild(modeSel);
+        ctl.appendChild(HL.switchEl(e.enabled, function (isOn) {
+          HL.post("/api/employees/" + e.id, { enabled: isOn }, "PATCH").then(function () {
+            av.classList.toggle("working", isOn);
+            st.className = "empo-state " + (isOn ? "ok" : "off");
+            st.textContent = isOn ? "On duty — working now" : "Paused";
+            HL.toast(e.name + (isOn ? " is on duty" : " paused"));
+          });
+        }));
+        hero.appendChild(ctl);
+        root.appendChild(hero);
+
+        /* -- what they're for, in one line each -- */
+        var caps = HL.el("div", "empo-caps");
+        (e.capabilities || []).forEach(function (c) { caps.appendChild(HL.el("span", "emp-cap", c)); });
+        root.appendChild(caps);
+
+        /* -- the conversation IS the page -- */
+        root.appendChild(HL.buildChat({
+          tall: true,
+          title: "Talk to " + e.name,
+          hint: e.role,
+          employee: e.id,
+          greet: EMP_GREET[e.id] || e.description,
+          chips: EMP_CHIPS[e.id] || [],
+          placeholder: "Tell " + e.name + " what you need…",
+        }));
         return root;
       });
     },
@@ -1168,6 +1271,63 @@
           c2.appendChild(HL.lineChart(stats.series, ["published", "scheduled"], [COLORS[1], COLORS[2]]));
           c2.appendChild(HL.legend(["Published", "Scheduled"], [COLORS[1], COLORS[2]]));
           root.appendChild(c2);
+
+          /* -- what's working: the learning loop, honest about its data -- */
+          var ip = HL.panel("What's working", "The team reads this and shapes new content toward it");
+          ip.style.marginTop = "16px";
+          HL.api("/api/insights").then(function (out) {
+            var ins = out.insights, comps = out.competitors || [];
+            if (ins.hasData) {
+              var grid = HL.el("div", "ins-grid");
+              [["Best post types", ins.byKind], ["Best platforms", ins.byPlatform], ["Best times", ins.byHour]].forEach(function (pair) {
+                var col = HL.el("div", "ins-col");
+                col.appendChild(HL.el("div", "ins-h", pair[0]));
+                pair[1].slice(0, 3).forEach(function (r, i) {
+                  var row = HL.el("div", "ins-row" + (i === 0 ? " win" : ""));
+                  row.innerHTML = "<span>" + HL.esc(r.key) + "</span><b>" + r.avg + "</b>";
+                  col.appendChild(row);
+                });
+                grid.appendChild(col);
+              });
+              ip.appendChild(grid);
+            }
+            (ins.recommendations || []).forEach(function (t) {
+              var r = HL.el("div", "ins-reco");
+              r.innerHTML = "<span class='ins-spark'>✦</span>" + HL.esc(t);
+              ip.appendChild(r);
+            });
+
+            /* -- competitors: researched from their real websites -- */
+            var cp = HL.panel("Competition", "The team reads their actual websites — nothing invented");
+            cp.style.marginTop = "16px";
+            var addRow = HL.el("form", "comp-add");
+            var cu = HL.input("competitor-website.com.au");
+            var cb = HL.el("button", "btn sm", "Study them");
+            cb.type = "submit";
+            addRow.appendChild(cu); addRow.appendChild(cb);
+            addRow.addEventListener("submit", function (ev) {
+              ev.preventDefault();
+              if (!cu.value.trim()) return;
+              cb.disabled = true; cb.textContent = "Reading their site…";
+              HL.post("/api/competitors", { url: cu.value.trim() })
+                .then(function () { HL.toast("Studied them"); HL.navigate(); })
+                .catch(function (e2) { HL.toast(e2.message, true); cb.disabled = false; cb.textContent = "Study them"; });
+            });
+            cp.appendChild(addRow);
+            if (!comps.length) {
+              cp.appendChild(HL.el("p", "sec-intro", "No competitors studied yet. Paste one's website above, or just ask Darcy \"who's our competition?\""));
+            }
+            comps.forEach(function (c) {
+              var card = HL.el("div", "comp-card");
+              card.innerHTML = "<div class='comp-head'><b>" + HL.esc(c.name) + "</b><span>" + HL.esc(c.url) + " · " + c.pagesRead + " pages read</span></div>" +
+                "<div class='comp-offer'>" + HL.esc(c.offer || "") + "</div>" +
+                ((c.gaps || []).length ? "<div class='comp-gaps'>" + c.gaps.map(function (g) { return "<span>" + HL.esc(g) + "</span>"; }).join("") + "</div>" : "") +
+                (c.takeaway ? "<div class='comp-take'>✦ " + HL.esc(c.takeaway) + "</div>" : "");
+              cp.appendChild(card);
+            });
+            root.appendChild(cp);
+          }).catch(function () {});
+          root.appendChild(ip);
 
           var missing = HL.el("p", "sec-intro");
           missing.style.marginTop = "14px";

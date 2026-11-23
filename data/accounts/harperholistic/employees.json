@@ -4,5 +4,29 @@
     "enabled": true,
     "mode": "assisted",
     "activatedAt": "2026-11-23T02:22:26.362Z"
+  },
+  {
+    "id": "social",
+    "enabled": true,
+    "mode": "supervised",
+    "activatedAt": "2026-11-23T03:15:59.829Z"
+  },
+  {
+    "id": "support",
+    "enabled": true,
+    "mode": "supervised",
+    "activatedAt": "2026-11-23T03:15:59.830Z"
+  },
+  {
+    "id": "sales",
+    "enabled": true,
+    "mode": "supervised",
+    "activatedAt": "2026-11-23T03:15:59.830Z"
+  },
+  {
+    "id": "web",
+    "enabled": true,
+    "mode": "supervised",
+    "activatedAt": "2026-11-23T03:15:59.831Z"
   }
 ]

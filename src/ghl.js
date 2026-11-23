@@ -79,7 +79,21 @@ async function listAccounts() {
   const { locationId } = config();
   const out = await call(`/social-media-posting/${locationId}/accounts`);
   const accounts = (out && out.results && out.results.accounts) || [];
-  return accounts.map((a) => ({ id: a.id, name: a.name, platform: a.platform }));
+  const mapped = accounts.map((a) => ({ id: a.id, name: a.name, platform: a.platform }));
+  // Remembered so chat and the home page can tell the truth about what's
+  // connected without a network round-trip on every turn.
+  store.saveCol("linked-accounts", { accounts: mapped, checkedAt: new Date().toISOString() });
+  return mapped;
+}
+
+/** Last-known connection state — cheap, honest about its age. */
+function linkedPlatforms() {
+  const cache = store.getCol("linked-accounts", {});
+  return {
+    configured: isConfigured(),
+    platforms: [...new Set((cache.accounts || []).map((a) => String(a.platform || "").toLowerCase()))],
+    checkedAt: cache.checkedAt || null,
+  };
 }
 
 // Our platform names vs the ones GHL reports.
@@ -170,4 +184,4 @@ function connectInfo() {
   return { locationId };
 }
 
-module.exports = { isConfigured, saveConfig, listAccounts, publishPost, health, connectInfo };
+module.exports = { isConfigured, saveConfig, listAccounts, linkedPlatforms, publishPost, health, connectInfo };

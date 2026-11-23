@@ -359,6 +359,20 @@ const toolSchemas = [
       required: ["task"],
     },
   },
+  {
+    name: "get_insights",
+    description: "What's performing: real engagement analysis of this account's published posts (best post types, platforms, timing) plus the current content mix. Honest when there's no data yet. Use for 'what's working', 'why aren't we growing', and before planning new content.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "research_competitor",
+    description: "Read a competitor's website (crawls their real pages) and compare them against this business — their offer, strengths, and the gaps we can use. Use when the user names a competitor or asks who/what they're up against.",
+    input_schema: {
+      type: "object",
+      properties: { url: { type: "string", description: "The competitor's website address" } },
+      required: ["url"],
+    },
+  },
 ];
 
 // ---- handlers ---------------------------------------------------------------
@@ -709,6 +723,32 @@ function makeHandlers(base = dt.now()) {
         ok: true,
         content: `Usage for ${s.month}: A$${s.spent.toFixed(2)} spent of the A$${s.cap.toFixed(2)} monthly cap — A$${s.remaining.toFixed(2)} left (${s.percent}%).${s.exhausted ? " The cap is exhausted; raise it in Settings to keep going." : ""}`,
       };
+    },
+
+    get_insights() {
+      const i = require("./insights").computeInsights();
+      const fmt = (rows) => rows.slice(0, 3).map((r) => `${r.key} (avg ${r.avg}, ${r.posts} posts)`).join("; ");
+      const lines = [
+        `Published: ${i.published} posts, ${i.withEngagement} with engagement data.`,
+        i.hasData
+          ? `Best post types: ${fmt(i.byKind)}. Best platforms: ${fmt(i.byPlatform)}. Best times: ${fmt(i.byHour)}.`
+          : `Not enough engagement data to rank anything honestly yet.`,
+        `Upcoming mix: ${Object.entries(i.mix).map(([k, n]) => `${k}×${n}`).join(", ") || "calendar is empty"}.`,
+        `Recommendations: ${i.recommendations.join(" ")}`,
+      ];
+      return { ok: true, content: lines.join("\n") };
+    },
+
+    async research_competitor(input) {
+      try {
+        const c = await require("./insights").researchCompetitor(input.url);
+        return {
+          ok: true,
+          content: `Read ${c.pagesRead} pages of ${c.name} (${c.url}).\nOffer: ${c.offer}\nStrengths: ${(c.strengths || []).join("; ") || "—"}\nGaps we can use: ${(c.gaps || []).join("; ") || "—"}\nTakeaway: ${c.takeaway}`,
+        };
+      } catch (e) {
+        return { ok: false, content: `Couldn't study that competitor — ${e.message}` };
+      }
     },
 
     list_tasks() {

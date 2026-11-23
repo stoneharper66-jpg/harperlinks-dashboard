@@ -28,6 +28,8 @@
     generate_video: "Producing the video",
     manage_employee: "Updating your AI team",
     get_usage: "Checking your usage",
+    get_insights: "Reading your performance numbers",
+    research_competitor: "Studying the competitor's website",
     list_tasks: "Checking your tasks",
     complete_task: "Ticking off the task",
   };
@@ -411,8 +413,18 @@
         if (dayPosts.length) cell.classList.add("has");
         dayPosts.slice(0, 3).forEach(function (p) {
           var ev = HL.el("div", "bigcal-ev plat-" + p.platform + (p.status === "published" ? " done" : ""));
-          ev.innerHTML = '<i class="ev-dot"></i><span>' + HL.esc((p.isVideo ? "🎬 " : "") + p.content.slice(0, 26)) + "</span>";
-          ev.title = p.platform + " · " + p.status + " — " + p.content;
+          // the actual picture going out, not just a dot
+          var thumb = p.mediaFile && !/\.mp4$/.test(p.mediaFile) ? "/api/media/file/" + p.mediaFile
+                    : p.mediaUrl || null;
+          ev.innerHTML = (thumb
+              ? '<img class="ev-thumb" src="' + HL.esc(thumb) + '" loading="lazy" alt="">'
+              : '<i class="ev-dot"></i>') +
+            "<span>" + HL.esc((p.isVideo ? "🎬 " : "") + p.content.slice(0, 24)) + "</span>";
+          ev.title = p.platform + " · " + p.status + " — click to edit";
+          ev.addEventListener("click", function (e2) {
+            e2.stopPropagation();
+            postEditor(p, function () { HL.navigate(); });
+          });
           cell.appendChild(ev);
         });
         if (dayPosts.length > 3) cell.appendChild(HL.el("div", "bigcal-more", "+" + (dayPosts.length - 3) + " more"));
@@ -425,26 +437,99 @@
     return panel;
   }
 
+  // The full editor: see the actual picture or video, change anything about
+  // the post, move it, pull it, bin it — or hand it back to Sage to improve.
   function postEditor(post, refresh) {
-    var body = HL.el("div");
+    var body = HL.el("div", "pe");
+
+    if (post && (post.mediaFile || post.mediaUrl)) {
+      var mw = HL.el("div", "pe-media");
+      if (post.mediaFile && /\.mp4$/.test(post.mediaFile)) {
+        var v = document.createElement("video");
+        v.src = "/api/media/file/" + post.mediaFile;
+        v.controls = true; v.muted = true; v.loop = true; v.playsInline = true;
+        mw.appendChild(v);
+      } else {
+        var im = document.createElement("img");
+        im.src = post.mediaFile ? "/api/media/file/" + post.mediaFile : post.mediaUrl;
+        im.alt = "Post media";
+        mw.appendChild(im);
+      }
+      if (post.mediaSource) mw.appendChild(HL.el("span", "pe-msrc", "Picture from " + post.mediaSource));
+      body.appendChild(mw);
+    }
+
     var platform = HL.select(["instagram", "facebook", "tiktok", "linkedin"], post ? post.platform : "instagram");
     var content = document.createElement("textarea");
     content.className = "textarea";
+    content.rows = 4;
     content.value = post ? post.content : "";
     content.placeholder = "Write the caption…";
     var tags = HL.input("hashtags, comma separated", post ? (post.hashtags || []).join(", ") : "");
-    var when = HL.input("e.g. tomorrow 10am, next week (blank = draft)", "");
+
+    var when = document.createElement("input");
+    when.type = "datetime-local";
+    when.className = "input";
+    if (post && post.scheduledAt) {
+      var d = new Date(post.scheduledAt);
+      when.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") +
+        "T" + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+
     body.appendChild(HL.field("Platform", platform));
     body.appendChild(HL.field("Caption", content));
     body.appendChild(HL.field("Hashtags", tags));
-    body.appendChild(HL.field(post ? "Reschedule (optional)" : "Schedule (optional)", when));
+    body.appendChild(HL.field(post && post.status === "scheduled" ? "Going out" : "Schedule it (blank = draft)", when));
+
+    if (post) {
+      var row = HL.el("div", "pe-actions");
+      var improve = HL.el("button", "btn ghost sm", "✦ Ask Sage to improve it");
+      improve.type = "button";
+      improve.addEventListener("click", function () {
+        HL.closeModal();
+        var chat = document.querySelector(".chat-panel") || document.querySelector(".cc-chat");
+        var send = chat && chat._send;
+        if (send) send("Rework post " + post.id + " — keep the facts, make it stronger, and tell me what you changed.");
+        else HL.toast("Open the chat and ask Sage to rework post " + post.id);
+      });
+      row.appendChild(improve);
+      if (post.status === "scheduled") {
+        var un = HL.el("button", "btn ghost sm", "Unschedule");
+        un.type = "button";
+        un.addEventListener("click", function () {
+          HL.post("/api/posts/" + post.id, { status: "draft" }, "PATCH").then(function () {
+            HL.toast("Back to drafts");
+            HL.closeModal();
+            refresh();
+          });
+        });
+        row.appendChild(un);
+      }
+      var del = HL.el("button", "btn ghost sm danger", "Delete");
+      del.type = "button";
+      del.addEventListener("click", function () {
+        if (!confirm("Delete this post for good?")) return;
+        HL.post("/api/posts/" + post.id, null, "DELETE").then(function () {
+          HL.toast("Deleted");
+          HL.closeModal();
+          refresh();
+        });
+      });
+      row.appendChild(del);
+      body.appendChild(row);
+    }
+
     HL.modal(post ? "Edit post" : "New post", body, function () {
       var payload = {
         platform: platform.value,
         content: content.value,
         hashtags: tags.value.split(",").map(function (t) { return t.trim().replace(/^#/, ""); }).filter(Boolean),
       };
-      if (when.value.trim()) payload.scheduledFor = when.value.trim();
+      if (when.value) {
+        var picked = new Date(when.value);
+        var already = post && post.scheduledAt && Math.abs(new Date(post.scheduledAt) - picked) < 60000;
+        if (!already) payload.scheduledAt = picked.toISOString();
+      }
       var req = post ? HL.post("/api/posts/" + post.id, payload, "PATCH") : HL.post("/api/posts", payload);
       return req.then(function () { HL.toast(post ? "Post updated" : "Post saved"); refresh(); });
     }, post ? "Save changes" : "Save post");
@@ -482,6 +567,12 @@
       }
       var st = HL.el("span", "pill-st " + p.status, p.status);
       item.appendChild(st);
+      // the whole card opens the editor; buttons still do their own thing
+      item.style.cursor = "pointer";
+      item.addEventListener("click", function (e2) {
+        if (e2.target.closest("button")) return;
+        postEditor(p, refresh);
+      });
       var acts = item.querySelector(".q-actions");
       if (p.status === "draft") {
         // supervision in one click: the AI wrote it, the owner approves it

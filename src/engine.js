@@ -29,6 +29,28 @@ function mode() {
   return HAS_KEY ? "live" : "demo";
 }
 
+// ---- who gets which tools ---------------------------------------------------
+// Six employees used to share one unscoped toolbox, which made them six name
+// tags on one bot. Now Sage can't edit the website and Indi can't book
+// appointments — each one's powers match their charter. Darcy (and plain
+// unattributed chat, e.g. the floating assistant) keeps the full set.
+const SHARED = ["get_business_profile", "get_knowledge", "add_task", "list_tasks", "complete_task", "get_usage"];
+const EMPLOYEE_TOOLS = {
+  social: ["ingest_website", "create_post", "schedule_post", "list_scheduled_posts", "update_post", "generate_image", "generate_video", "get_insights"],
+  support: ["create_lead"],
+  receptionist: ["book_appointment", "create_lead"],
+  sales: ["create_lead", "book_appointment"],
+  web: ["ingest_website", "get_website", "build_website", "edit_website", "publish_website", "get_website_html", "generate_image", "research_competitor"],
+  manager: null, // everything
+};
+
+function toolsFor(employeeId) {
+  const allow = EMPLOYEE_TOOLS[employeeId];
+  if (!employeeId || allow === null || allow === undefined) return toolSchemas;
+  const set = new Set(SHARED.concat(allow));
+  return toolSchemas.filter((t) => set.has(t.name));
+}
+
 // Cap history without orphaning a tool_result from its tool_use.
 function trimHistory(history, max = 24) {
   if (history.length <= max) return history;
@@ -54,11 +76,8 @@ async function respondLive(session, userMessage, employeeId, onStep) {
   }
   const base = dt.now();
   const handlers = makeHandlers(base);
-  let system = buildSystemPrompt(store.getProfile(), base);
-  if (employeeId) {
-    const emp = require("./employees").getState(employeeId);
-    if (emp.role) system = `Right now the owner is talking to ${emp.name}, their ${emp.role} — answer in that role and lead with that specialty, while still able to use any tool.\n\n` + system;
-  }
+  const system = buildSystemPrompt(store.getProfile(), base, employeeId);
+  const empTools = toolsFor(employeeId);
 
   session.history.push({ role: "user", content: userMessage });
   trimHistory(session.history);
@@ -78,7 +97,7 @@ async function respondLive(session, userMessage, employeeId, onStep) {
       max_tokens: 16000,
       output_config: { effort: EFFORT },
       system,
-      tools: toolSchemas,
+      tools: empTools,
       messages: session.history,
     });
 
