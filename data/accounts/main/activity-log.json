@@ -268,5 +268,41 @@
     "type": "system",
     "message": "Server error — listen EADDRINUSE: address already in use :::4700",
     "refId": null
+  },
+  {
+    "at": "2026-11-23T06:30:04.258Z",
+    "type": "auth",
+    "message": "Password reset requested for harperlinksteam@gmail.com — link is in the server log (email not configured)",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T06:30:18.745Z",
+    "type": "auth",
+    "message": "Password reset completed for harperlinksteam@gmail.com",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T06:30:18.824Z",
+    "type": "auth",
+    "message": "Password reset requested for harperlinksteam@gmail.com — link is in the server log (email not configured)",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T06:30:28.397Z",
+    "type": "auth",
+    "message": "Password reset requested for harperlinksteam@gmail.com — link is in the server log (email not configured)",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T06:30:28.454Z",
+    "type": "auth",
+    "message": "Password reset completed for harperlinksteam@gmail.com",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T06:31:16.557Z",
+    "type": "auth",
+    "message": "Password reset requested for harperlinksteam@gmail.com — link is in the server log (email not configured)",
+    "refId": null
   }
 ]

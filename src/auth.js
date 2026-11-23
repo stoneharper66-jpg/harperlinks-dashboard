@@ -103,6 +103,48 @@ function setDisabled(userId, disabled) {
   return publicUser(u);
 }
 
+// ---- forgotten passwords ---------------------------------------------------
+// A reset link carries a long random token. We only ever store its HASH, so a
+// leaked data file can't be used to reset anyone's password. Tokens are
+// single-use and expire after an hour.
+const RESET_TTL_MS = 60 * 60 * 1000;
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+/**
+ * Begin a reset for an email. Returns { token, user } when the email matches a
+ * real account, or null when it doesn't — the caller answers identically either
+ * way, so this endpoint can't be used to discover who has an account.
+ */
+function startReset(email) {
+  const u = findByEmail(email);
+  if (!u || u.disabled) return null;
+  const token = crypto.randomBytes(32).toString("base64url");
+  const resets = store.getGlobal("password-resets", []).filter((r) => r.userId !== u.id && r.expires > Date.now());
+  resets.push({ userId: u.id, tokenHash: hashToken(token), expires: Date.now() + RESET_TTL_MS });
+  store.saveGlobal("password-resets", resets);
+  return { token, user: u };
+}
+
+/** Finish a reset: check the token, set the new password, burn the token. */
+function completeReset(token, newPassword) {
+  if (String(newPassword || "").length < 8) throw new Error("Password needs at least 8 characters.");
+  const th = hashToken(token);
+  const resets = store.getGlobal("password-resets", []);
+  const rec = resets.find((r) => r.tokenHash === th);
+  if (!rec || rec.expires < Date.now()) throw new Error("That reset link has expired — request a new one.");
+  const users = getUsers();
+  const u = users.find((x) => x.id === rec.userId);
+  if (!u) throw new Error("That account no longer exists.");
+  const { salt, hash } = hashPassword(newPassword);
+  u.salt = salt; u.hash = hash; u.disabled = false;
+  saveUsers(users);
+  store.saveGlobal("password-resets", resets.filter((r) => r.userId !== rec.userId)); // single use
+  return publicUser(u);
+}
+
 // What the browser is allowed to know about a user — no salt, no hash.
 function publicUser(u) {
   return {
@@ -214,6 +256,7 @@ function login(email, password) {
 module.exports = {
   COOKIE,
   hasAdmin, createUser, setPassword, setDisabled, setPlan, publicUser,
+  startReset, completeReset,
   getUsers, findByEmail,
   login, makeToken, cookieFor, clearCookie, userFromRequest, contextFromRequest,
 };

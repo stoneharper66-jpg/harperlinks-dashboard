@@ -20,7 +20,7 @@
   {
     "id": "sales",
     "enabled": true,
-    "mode": "supervised",
+    "mode": "autonomous",
     "activatedAt": "2026-11-23T03:15:59.830Z"
   },
   {

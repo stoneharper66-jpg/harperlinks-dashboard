@@ -78,5 +78,13 @@
     "units": 1,
     "cost": 0.045,
     "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T04:29:25.636Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
   }
 ]

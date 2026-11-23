@@ -123,6 +123,50 @@ app.get("/api/auth/me", (req, res) => {
   res.json(out);
 });
 
+// ---- forgot password (public — you can't be signed in to use these) --------
+// Always answers the same whether the email exists or not, so nobody can use
+// it to find out who has an account. The reset link is emailed when email is
+// set up; otherwise it's written to the server log for the team to hand over.
+app.post("/api/auth/forgot", async (req, res) => {
+  const email = (req.body || {}).email;
+  const same = { ok: true, message: "If that email has an account, a reset link is on its way." };
+  try {
+    const started = auth.startReset(email);
+    if (!started) return res.json(same); // no such account — identical answer
+    const base = process.env.PUBLIC_BASE_URL
+      || `${req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}`;
+    const link = `${base.replace(/\/$/, "")}/reset.html?token=${started.token}`;
+
+    const notify = require("./src/notify");
+    let out = { sent: false };
+    if (notify.configured()) {
+      out = await notify.sendTo(started.user.email, "Reset your HarperLinks password",
+        `Someone asked to reset the password for your HarperLinks account.\n\nSet a new one here (the link lasts one hour):\n${link}\n\nIf this wasn't you, ignore this email — your password hasn't changed.`);
+    }
+    if (!out.sent) {
+      // Email isn't configured (or failed). The operator can retrieve the link
+      // from the server log and hand it to the person. Never a public response.
+      console.log(`[password reset] ${started.user.email} → ${link}`);
+      tenant.run(tenant.MAIN, () => store.logActivity("auth", `Password reset requested for ${started.user.email} — link is in the server log (email not configured)`));
+    }
+    res.json(same);
+  } catch (e) {
+    console.error("forgot error:", e.message);
+    res.json(same); // never leak whether it worked
+  }
+});
+
+app.post("/api/auth/reset", (req, res) => {
+  const { token, password } = req.body || {};
+  try {
+    const user = auth.completeReset(token, password);
+    tenant.run(tenant.MAIN, () => store.logActivity("auth", `Password reset completed for ${user.email}`));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ========================= public website endpoints ==========================
 // Used by the marketing site's chat widget. No sign-in, no cookies, no tenant
 // data — just the sales agent. CORS is wide open because nothing here is
