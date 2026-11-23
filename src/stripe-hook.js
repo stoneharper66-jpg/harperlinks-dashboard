@@ -57,6 +57,29 @@ function tempPassword() {
 }
 
 const PLAN_BY_AMOUNT = { 24900: "professional", 49900: "business", 99900: "enterprise" };
+const PLANS = ["professional", "business", "enterprise"];
+
+// Every one of our links starts with a 7-day free trial, so the checkout that
+// arrives charges $0 — the amount can't tell us which plan they picked. Ask
+// Stripe what the subscription is actually for.
+async function planFromStripe(session) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key || !session.subscription) return null;
+  const id = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+  try {
+    const r = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const sub = await r.json();
+    const item = sub.items && sub.items.data && sub.items.data[0];
+    const unit = item && item.price && item.price.unit_amount;
+    return PLAN_BY_AMOUNT[unit] || null;
+  } catch {
+    return null; // Stripe unreachable — fall back rather than fail the signup
+  }
+}
 
 async function handleCheckout(session) {
   const email = (session.customer_details && session.customer_details.email) || session.customer_email;
@@ -66,8 +89,11 @@ async function handleCheckout(session) {
   const bizField = custom.find((f) => f.key === "business_name");
   const business = (bizField && bizField.text && bizField.text.value) || name || "";
   const amount = session.amount_total || (session.amount_subtotal || 0);
-  const plan = PLAN_BY_AMOUNT[amount] || "professional";
-  const trialing = (session.subscription && session.status === "complete" && amount === 0) || amount === 0;
+  const trialing = amount === 0;
+  const plan = PLAN_BY_AMOUNT[amount]
+    || (session.metadata && PLANS.includes(session.metadata.plan) ? session.metadata.plan : null)
+    || await planFromStripe(session)
+    || "professional";
 
   if (!email) {
     tenant.run(tenant.MAIN, () => store.logActivity("system", "Stripe checkout arrived with no email — couldn't create an account"));
@@ -113,6 +139,30 @@ async function handleCheckout(session) {
     store.logActivity("lead", `💰 New ${plan} customer: ${name || email}${business ? ` (${business})` : ""} — account "${accountId}" is ready`, user.id);
   });
 
+  // The customer hears from us first, in the same breath as the payment —
+  // nobody should have to wait on a human to get into what they just bought.
+  const signIn = `${process.env.PUBLIC_BASE_URL || "https://harperlinks-dashboard-production.up.railway.app"}/app`;
+  const welcome = await notify.sendTo(
+    email,
+    `Your HarperLinks account is ready${business ? `, ${business}` : ""}`,
+    `Hi${name ? ` ${name.split(" ")[0]}` : ""},
+
+Your ${plan} plan is live${trialing ? " and your 7-day free trial has started" : ""}. Your AI team is already set up and waiting for you.
+
+Sign in:   ${signIn}
+Email:     ${email}
+Password:  ${password}
+
+Please change that password once you're in — Settings, then Password.
+
+First thing to do: paste your website address into the Command Centre. Your team reads it and learns your business — what you sell, how you talk, who you serve — and then they can start writing your posts and handling your leads.
+
+Any trouble at all, just reply to this email.
+
+— Stone and Terry
+   HarperLinks`
+  );
+
   const mail = await notify.sendToTeam(
     `💰 New HarperLinks customer: ${business || name || email}`,
     `A ${plan} subscription just started${trialing ? " (7-day free trial)" : ""}.
@@ -122,27 +172,31 @@ Business: ${business || "—"}
 Email:    ${email}
 Phone:    ${phone || "—"}
 
-Their account is already created and waiting:
+Their account was created automatically:
   Account id:  ${accountId}
-  Sign in:     ${process.env.PUBLIC_BASE_URL || "your dashboard"}
+  Sign in:     ${signIn}
   Email:       ${email}
   Temp password: ${password}
 
-What to do now:
-  1. Message them on WhatsApp or email today.
-  2. In HQ → Customer Accounts, hit "Connect" to link their publishing.
-  3. "Log in as" them, paste their website into the Command Centre, build their automations.
-  4. Send them their sign-in details and the temporary password above.
+${welcome.sent
+  ? `They have ALREADY been emailed these sign-in details — they can get in on their own right now.`
+  : `⚠️ Their welcome email did NOT send (${welcome.reason}) — send them the details above yourself, today.`}
 
-You have 7 days — that's the promise on the site.`
+Worth doing anyway:
+  1. HQ → Customer Accounts → "Connect" to link their publishing.
+  2. "Log in as" them, paste their website into the Command Centre, build their automations.
+  3. Say hello on WhatsApp — a human within 7 days is the promise on the site.`
   );
   tenant.run(tenant.MAIN, () => {
+    store.logActivity("auth", welcome.sent
+      ? `Welcome email with sign-in details sent to ${email} — they can log in unaided`
+      : `Couldn't send ${email} their welcome email — ${welcome.reason}. Details are in your CRM and in HQ.`);
     store.logActivity("system", mail.sent
-      ? `Customer welcome details emailed to ${notify.NOTIFY_EMAIL}`
-      : `Couldn't email the new customer's details — ${mail.reason}. They're in your CRM and HQ.`);
+      ? `Handover details emailed to ${notify.NOTIFY_EMAIL}`
+      : `Couldn't email you the handover — ${mail.reason}. It's all in your CRM and HQ.`);
   });
 
-  return { ok: true, accountId, plan };
+  return { ok: true, accountId, plan, welcomed: welcome.sent };
 }
 
 async function handle(rawBody, signature, secret) {

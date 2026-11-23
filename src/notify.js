@@ -28,21 +28,25 @@ function transport() {
   });
 }
 
-async function sendToTeam(subject, text) {
+async function sendTo(to, subject, text) {
   if (!configured()) {
     return { sent: false, reason: "email isn't set up yet (add SMTP_HOST/SMTP_USER/SMTP_PASS to .env)" };
   }
   try {
     await transport().sendMail({
       from: `"HarperLinks" <${process.env.SMTP_USER}>`,
-      to: NOTIFY_EMAIL,
+      to,
       subject,
       text,
     });
-    return { sent: true, to: NOTIFY_EMAIL };
+    return { sent: true, to };
   } catch (e) {
     return { sent: false, reason: e.message };
   }
 }
 
-module.exports = { sendToTeam, configured, NOTIFY_EMAIL };
+function sendToTeam(subject, text) {
+  return sendTo(NOTIFY_EMAIL, subject, text);
+}
+
+module.exports = { sendTo, sendToTeam, configured, NOTIFY_EMAIL };
