@@ -1454,3 +1454,12 @@ body{overflow-x:hidden}
   border:1px dashed var(--border);border-radius:99px;padding:6px 14px;cursor:pointer;transition:all var(--t-fast) var(--ease)}
 .cc-nudge:hover{color:var(--accent);border-color:var(--accent-border);border-style:solid}
 .cc.engaged .cc-nudges{display:none}
+
+/* A modal must never be taller than the screen. The post editor's photo
+   made it one — now the modal caps at the viewport and scrolls inside,
+   the footer stays pinned, and the preview never hogs the height. */
+.modal{box-sizing:border-box;max-height:calc(93vh - 20px);display:flex;flex-direction:column;overflow:hidden}
+.modal>h3{flex:none}
+.modal>div:not(.m-foot){flex:1;min-height:0;overflow-y:auto;padding-right:4px;margin-right:-4px}
+.modal .m-foot{flex:none;padding-top:14px;margin-top:10px;border-top:1px solid var(--border)}
+.pe-media img,.pe-media video{max-height:min(230px,28vh)}
