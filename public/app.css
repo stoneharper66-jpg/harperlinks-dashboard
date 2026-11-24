@@ -1705,3 +1705,71 @@ body{overflow-x:hidden}
 .mail-sub { font-size: 13px; }
 .mail-when { font-size: 11.5px; color: var(--muted); }
 .mail-row.bad .mail-when { color: var(--bad); }
+
+/* ---- watching a website scan happen -------------------------------------- */
+/* Every row and number in here comes from the server's real crawl progress. */
+
+.scan-modal { max-width: 460px; }
+.scan-head { display: flex; align-items: center; gap: 13px; margin-bottom: 14px; }
+
+.scan-orb { position: relative; width: 44px; height: 44px; flex: 0 0 auto; }
+.scan-ring {
+  position: absolute; inset: 0; border-radius: 99px;
+  border: 2px solid var(--accent-border); border-top-color: var(--accent);
+  animation: scanSpin .9s linear infinite;
+}
+@keyframes scanSpin { to { transform: rotate(360deg); } }
+/* a little page being read, line by line */
+.scan-doc {
+  position: absolute; inset: 11px; border-radius: 3px; background: var(--card);
+  border: 1.5px solid var(--accent); overflow: hidden;
+}
+.scan-doc::after {
+  content: ""; position: absolute; left: 2px; right: 2px; top: 2px; height: 1.5px;
+  background: var(--accent); box-shadow: 0 3px 0 var(--accent-border), 0 6px 0 var(--accent-border);
+  animation: scanLines 1.1s ease-in-out infinite;
+}
+@keyframes scanLines { 0%,100% { transform: translateY(0); } 50% { transform: translateY(9px); } }
+
+.scan-modal.thinking .scan-ring { border-top-color: var(--accent2); animation-duration: .5s; }
+.scan-modal.scan-done .scan-ring { animation: none; border-color: var(--ok); }
+.scan-modal.scan-done .scan-doc { border-color: var(--ok); }
+.scan-modal.scan-done .scan-doc::after { animation: none; background: var(--ok); box-shadow: 0 3px 0 var(--ok), 0 6px 0 var(--ok); }
+.scan-modal.scan-failed .scan-ring { animation: none; border-color: var(--bad); }
+.scan-modal.scan-failed .scan-doc { border-color: var(--bad); }
+.scan-modal.scan-failed .scan-doc::after { animation: none; background: var(--bad); }
+
+.scan-title { font-weight: 650; font-size: 15px; }
+.scan-host { font-size: 12.5px; color: var(--muted); }
+.scan-step {
+  font-size: 13px; color: var(--muted); min-height: 19px;
+  padding: 9px 12px; background: var(--accent-tint); border-radius: 9px;
+}
+.scan-modal.scan-failed .scan-step { background: rgba(214,69,69,.08); color: var(--bad); }
+.scan-modal.scan-done .scan-step { background: rgba(23,166,115,.09); color: var(--ok); }
+
+.scan-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.scan-count {
+  text-align: center; padding: 11px 8px; border: 1px solid var(--border); border-radius: 11px;
+}
+.scan-count b { display: block; font-size: 22px; font-weight: 700; line-height: 1.1; }
+.scan-count span { font-size: 11.5px; color: var(--muted); }
+
+.scan-list { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.scan-row {
+  display: flex; gap: 9px; align-items: flex-start; padding: 7px 9px;
+  border-radius: 9px; background: var(--card); border: 1px solid var(--border);
+  animation: scanRowIn .26s var(--ease-out) both;
+}
+@keyframes scanRowIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+.scan-tick {
+  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 99px; margin-top: 1px;
+  background: var(--ok); color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700;
+}
+.scan-rowt { min-width: 0; }
+.scan-rname { font-size: 13px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-rurl { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-ring, .scan-doc::after, .scan-row { animation: none !important; }
+}

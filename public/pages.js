@@ -1106,9 +1106,17 @@
           var v = lurl.value.trim();
           if (!v) return HL.toast("Paste a website address first.", true);
           lgo.disabled = true; lgo.textContent = "Learning…";
+          // /api/ingest answers immediately with {started:true} and does the
+          // reading in the background — this used to read out.profile.name
+          // off that reply and throw "Cannot read properties of undefined".
+          // Now we watch the real scan instead.
           HL.post("/api/website/link", { url: v })
             .then(function () { return HL.post("/api/ingest", { url: v }); })
-            .then(function (out) { HL.toast("Linked and learned " + out.profile.name + " ✓"); HL.navigate(); })
+            .then(function () { return HL.scanWatch(v); })
+            .then(function (scan) {
+              HL.toast(scan.step || "Learned it ✓");
+              lgo.disabled = false; lgo.textContent = "Link & learn";
+            })
             .catch(function (e) { HL.toast(e.message, true); lgo.disabled = false; lgo.textContent = "Link & learn"; });
         });
         lrow.appendChild(lurl); lrow.appendChild(lgo);

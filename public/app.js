@@ -231,6 +231,105 @@
   };
   HL.closeModal = function () { HL.$("modalBackdrop").hidden = true; };
 
+  /* ---------- watching a website scan happen ----------
+     Reading a site takes a minute. The server has always written its real
+     progress to /api/scan — which page it's on, how many it has read, how
+     many photos it found — and nothing watched it, so the owner stared at a
+     frozen button and had no idea whether it was working.
+
+     Every row below appears because a page was genuinely fetched and read.
+     The counts are the server's counts. If the crawl dies, the real reason
+     is what gets shown. */
+  HL.scanWatch = function (url, opts) {
+    opts = opts || {};
+    var back = HL.$("modalBackdrop"), m = HL.$("modal");
+    m.innerHTML = "";
+    m.classList.add("scan-modal");
+
+    var head = HL.el("div", "scan-head");
+    var orb = HL.el("div", "scan-orb");
+    orb.innerHTML = '<span class="scan-ring"></span><span class="scan-doc"></span>';
+    head.appendChild(orb);
+    var ht = HL.el("div");
+    ht.appendChild(HL.el("div", "scan-title", "Reading your website"));
+    var hostName = url;
+    try { hostName = new URL(/^https?:/.test(url) ? url : "https://" + url).hostname; } catch (e) { /* show it raw */ }
+    ht.appendChild(HL.el("div", "scan-host", hostName));
+    head.appendChild(ht);
+    m.appendChild(head);
+
+    var step = HL.el("div", "scan-step", "Opening the site…");
+    m.appendChild(step);
+
+    var counts = HL.el("div", "scan-counts");
+    var cPages = HL.el("div", "scan-count");
+    cPages.innerHTML = '<b>0</b><span>pages read</span>';
+    var cPhotos = HL.el("div", "scan-count");
+    cPhotos.innerHTML = '<b>0</b><span>photos found</span>';
+    counts.appendChild(cPages); counts.appendChild(cPhotos);
+    m.appendChild(counts);
+
+    var list = HL.el("div", "scan-list");
+    m.appendChild(list);
+
+    var foot = HL.el("div", "m-foot");
+    var close = HL.el("button", "btn ghost", "Hide");
+    close.title = "The scan keeps going in the background";
+    close.addEventListener("click", function () { stop(); HL.closeModal(); });
+    foot.appendChild(close);
+    m.appendChild(foot);
+    back.hidden = false;
+
+    var seen = {};        // url -> row, so a page never lists twice
+    var timer = null, stopped = false;
+    function stop() { stopped = true; clearInterval(timer); m.classList.remove("scan-modal"); }
+
+    function paint(scan) {
+      if (scan.step) step.textContent = scan.step;
+      cPages.querySelector("b").textContent = scan.pagesRead || 0;
+      cPhotos.querySelector("b").textContent = scan.imagesFound || 0;
+      (scan.visited || []).forEach(function (v) {
+        if (seen[v.url]) return;
+        var row = HL.el("div", "scan-row");
+        row.innerHTML = '<span class="scan-tick">✓</span>';
+        var t = HL.el("div", "scan-rowt");
+        t.appendChild(HL.el("div", "scan-rname", v.title || v.url));
+        t.appendChild(HL.el("div", "scan-rurl", v.url));
+        row.appendChild(t);
+        list.appendChild(row);
+        list.scrollTop = list.scrollHeight;
+        seen[v.url] = row;
+      });
+      m.classList.toggle("thinking", scan.status === "thinking");
+    }
+
+    return new Promise(function (resolve, reject) {
+      timer = setInterval(function () {
+        if (stopped) return;
+        HL.api("/api/scan").then(function (out) {
+          var scan = out.scan || {};
+          paint(scan);
+          if (scan.status === "done") {
+            stop();
+            step.textContent = scan.step || "Done";
+            m.classList.add("scan-done");
+            orb.classList.add("done");
+            close.textContent = "Great";
+            close.className = "btn";
+            resolve(scan);
+            if (opts.onDone) opts.onDone(scan);
+          } else if (scan.status === "failed") {
+            stop();
+            m.classList.add("scan-failed");
+            step.textContent = scan.error || "The scan failed.";
+            close.textContent = "Close";
+            reject(new Error(scan.error || "The scan failed."));
+          }
+        }).catch(function () { /* a dropped poll is not a failed scan */ });
+      }, 700);
+    });
+  };
+
   /* ---------- shared widgets ---------- */
   HL.stat = function (label, value, sub, accent) {
     var d = HL.el("div", "stat" + (accent ? " accent" : ""));
