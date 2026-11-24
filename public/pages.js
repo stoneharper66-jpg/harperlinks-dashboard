@@ -1039,7 +1039,7 @@
           var framed = "[Request from the Website page" +
             (isBuilt ? " — a HarperLinks-built site already exists; read it and edit it" : "") +
             "] " + text;
-          HL.stream("/api/chat/stream", { sessionId: "website-" + HL.sessionId, message: framed, employee: "web" }, function (ev) {
+          HL.stream("/api/chat/stream", { thread: "web", message: framed, employee: "web" }, function (ev) {
             if (ev.phase === "model") head2.querySelector(".wt-label").textContent = "Thinking…";
             else if (ev.phase === "tool-start") {
               head2.querySelector(".wt-label").textContent = "Working…";
@@ -1644,7 +1644,77 @@
         });
         body.appendChild(save);
         panel.appendChild(body);
+        panel.style.marginBottom = "16px";
         root.appendChild(panel);
+
+        /* ---- what the AI remembers ----
+           The knowledge base above is the form. This is everything the team
+           has picked up from talking to you. Shown in full and deletable,
+           because a memory you can't see is a memory you can't correct. */
+        var mp = HL.panel("What your AI remembers", "Things you've told your team in chat — they carry across every conversation");
+        var mb = HL.el("div", "panel-body");
+        mp.appendChild(mb);
+        root.appendChild(mp);
+
+        function drawMemory() {
+          mb.innerHTML = "";
+          HL.api("/api/memory").then(function (out) {
+            var items = out.items || [];
+            var addRow = HL.el("div", "frow");
+            addRow.style.marginBottom = items.length ? "14px" : "0";
+            var factIn = HL.input("e.g. We never discount — we add value instead");
+            addRow.appendChild(HL.field("Tell them something to remember", factIn));
+            var addBtn = HL.el("button", "btn sm", "Remember it");
+            addBtn.style.alignSelf = "flex-end";
+            addBtn.addEventListener("click", function () {
+              if (!factIn.value.trim()) return;
+              HL.post("/api/memory", { fact: factIn.value, category: "rule" })
+                .then(function () { HL.toast("Saved — your whole AI team knows it now"); drawMemory(); })
+                .catch(function (e) { HL.toast(e.message, true); });
+            });
+            var bw = HL.el("div", "field");
+            bw.appendChild(HL.el("label", null, " "));
+            bw.appendChild(addBtn);
+            addRow.appendChild(bw);
+            mb.appendChild(addRow);
+
+            if (!items.length) {
+              mb.appendChild(HL.el("p", "sec-intro", "Nothing yet. As you chat, anything you tell them that's worth keeping — how you like things done, standing rules, who's who — gets saved here automatically."));
+              return;
+            }
+
+            var list = HL.el("div", "mem-list");
+            items.forEach(function (m) {
+              var row = HL.el("div", "mem-row" + (m.pinned ? " pinned" : ""));
+              var txt = HL.el("div", "mem-text", m.text);
+              row.appendChild(txt);
+              var meta = HL.el("div", "mem-meta",
+                (m.pinned ? "pinned · " : "") + (m.savedBy === "owner" ? "you added this" : "saved by your AI") +
+                " · " + HL.fmtWhen(m.at));
+              row.appendChild(meta);
+              var acts = HL.el("div", "mem-acts");
+              var pin = HL.el("button", "btn ghost sm", m.pinned ? "Unpin" : "Pin");
+              pin.title = m.pinned ? "Let it age out normally" : "Keep this one forever";
+              pin.addEventListener("click", function () {
+                HL.post("/api/memory/" + m.id, { pinned: !m.pinned }, "PATCH").then(drawMemory);
+              });
+              acts.appendChild(pin);
+              var del = HL.el("button", "btn ghost sm danger", "Forget");
+              del.addEventListener("click", function () {
+                if (!confirm("Forget this? \n\n" + m.text)) return;
+                HL.post("/api/memory/" + m.id, {}, "DELETE")
+                  .then(function () { HL.toast("Forgotten"); drawMemory(); })
+                  .catch(function (e) { HL.toast(e.message, true); });
+              });
+              acts.appendChild(del);
+              row.appendChild(acts);
+              list.appendChild(row);
+            });
+            mb.appendChild(list);
+          });
+        }
+        drawMemory();
+
         return root;
       });
     },

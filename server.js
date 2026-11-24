@@ -5,6 +5,7 @@ const path = require("path");
 const express = require("express");
 
 const engine = require("./src/engine");
+const memory = require("./src/memory");
 const auth = require("./src/auth");
 const tenant = require("./src/tenant");
 const siteAgent = require("./src/site-agent");
@@ -491,20 +492,46 @@ app.post("/api/accounts/:accountId/ghl", adminOnly, async (req, res) => {
   });
 });
 
-// ---- chat sessions (in-memory, 30 min TTL) ---------------------------------
+// ---- chat sessions ----------------------------------------------------------
+// The Map is only a cache now; the conversation itself lives on disk (see
+// src/chatlog.js). That's the difference between "the bot forgot because the
+// page reloaded" and a thread you can come back to tomorrow.
+//
+// One thread per employee rather than per browser tab: Sage's conversation
+// and Indi's stay separate, and both survive a restart.
+const chatlog = require("./src/chatlog");
 const sessions = new Map();
-const SESSION_TTL = 30 * 60 * 1000;
+const SESSION_TTL = 30 * 60 * 1000; // how long we keep it hot in memory
 
-function getSession(id) {
-  const key = String(id || "default");
+function threadFor(req) {
+  const body = req.body || {};
+  const raw = body.thread || body.employee || "main";
+  return String(raw).toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40) || "main";
+}
+
+function getSession(accountId, thread) {
+  const key = accountId + ":" + thread;
   let s = sessions.get(key);
   if (!s) {
-    s = { history: [], last: Date.now() };
+    const saved = chatlog.load(thread);
+    s = { history: saved.history, transcript: saved.transcript, last: Date.now() };
     sessions.set(key, s);
   }
   s.last = Date.now();
   return s;
 }
+
+// Persist the finished exchange. Wrapped because a write failure must not
+// lose the answer the owner is already reading.
+function keepTurn(thread, session, message, out) {
+  try {
+    chatlog.record(session, message, out);
+    chatlog.save(thread, session);
+  } catch (e) {
+    console.error("chat save failed:", e.message);
+  }
+}
+
 setInterval(() => {
   const cutoff = Date.now() - SESSION_TTL;
   for (const [k, s] of sessions) if (s.last < cutoff) sessions.delete(k);
@@ -522,11 +549,14 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { sessionId, message } = req.body || {};
+  const { message } = req.body || {};
   if (!message || !String(message).trim()) return res.status(400).json({ error: "Message is empty." });
   try {
-    const session = getSession(req.user.accountId + ":" + String(sessionId || "default"));
-    const out = await engine.respond(session, String(message).slice(0, 4000), (req.body || {}).employee);
+    const thread = threadFor(req);
+    const session = getSession(req.user.accountId, thread);
+    const text = String(message).slice(0, 4000);
+    const out = await engine.respond(session, text, (req.body || {}).employee);
+    keepTurn(thread, session, text, out);
     res.json({ reply: out.reply, actions: out.actions, steps: out.steps || [], mode: engine.mode() });
   } catch (e) {
     console.error("chat error:", e.message);
@@ -538,7 +568,7 @@ app.post("/api/chat", async (req, res) => {
 // than summarised once it's over. Server-sent events over a POST, so the chat
 // can show real progress during the wait instead of a spinner.
 app.post("/api/chat/stream", async (req, res) => {
-  const { sessionId, message } = req.body || {};
+  const { message } = req.body || {};
   if (!message || !String(message).trim()) return res.status(400).json({ error: "Message is empty." });
 
   res.writeHead(200, {
@@ -559,13 +589,16 @@ app.post("/api/chat/stream", async (req, res) => {
   res.on("close", () => { gone = true; });
 
   try {
-    const session = getSession(req.user.accountId + ":" + String(sessionId || "default"));
+    const thread = threadFor(req);
+    const session = getSession(req.user.accountId, thread);
+    const text = String(message).slice(0, 4000);
     const out = await engine.respond(
       session,
-      String(message).slice(0, 4000),
+      text,
       (req.body || {}).employee,
       (ev) => { if (!gone) send(ev); }
     );
+    keepTurn(thread, session, text, out);
     send({ phase: "done", reply: out.reply, actions: out.actions, steps: out.steps || [], mode: engine.mode() });
   } catch (e) {
     console.error("chat stream error:", e.message);
@@ -574,9 +607,55 @@ app.post("/api/chat/stream", async (req, res) => {
   if (!res.writableEnded) res.end();
 });
 
+// The conversation so far, so a reloaded page draws the thread back instead
+// of greeting the owner as a stranger.
+app.get("/api/chat/history", (req, res) => {
+  const thread = String(req.query.thread || req.query.employee || "main")
+    .toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40) || "main";
+  res.json({ ok: true, thread, transcript: chatlog.transcript(thread) });
+});
+
+// Start fresh — clears both the model's history and what's drawn on screen.
+// Deliberately does NOT touch memory: forgetting the chat is not the same as
+// forgetting the business, and conflating them would lose real facts.
+app.post("/api/chat/clear", (req, res) => {
+  const thread = threadFor(req);
+  chatlog.clear(thread);
+  sessions.delete(req.user.accountId + ":" + thread);
+  res.json({ ok: true, thread });
+});
+
 app.post("/api/reset", (req, res) => {
-  sessions.delete(String((req.body || {}).sessionId || "default"));
+  const thread = threadFor(req);
+  chatlog.clear(thread);
+  sessions.delete(req.user.accountId + ":" + thread);
   res.json({ ok: true });
+});
+
+// ---- memory -----------------------------------------------------------------
+// Everything the AI has saved, visible and deletable by the owner. A memory
+// the owner can't see is a memory they can't correct.
+app.get("/api/memory", (_req, res) => {
+  res.json({ ok: true, items: memory.all(), max: memory.MAX });
+});
+
+app.post("/api/memory", (req, res) => {
+  const { fact, category } = req.body || {};
+  const out = memory.remember(fact, { category, employee: "owner", pinned: true });
+  if (!out.saved) return res.status(400).json({ error: out.reason || "Couldn't save that." });
+  res.json({ ok: true, record: out.record, duplicate: !!out.duplicate });
+});
+
+app.delete("/api/memory/:id", (req, res) => {
+  const out = memory.forget(req.params.id);
+  if (!out.removed) return res.status(404).json({ error: "Not found." });
+  res.json({ ok: true, removed: out.removed });
+});
+
+app.patch("/api/memory/:id", (req, res) => {
+  const m = memory.pin(req.params.id, !!(req.body || {}).pinned);
+  if (!m) return res.status(404).json({ error: "Not found." });
+  res.json({ ok: true, record: m });
 });
 
 // ---- profile / knowledge ------------------------------------------------------

@@ -75,7 +75,7 @@ async function respondLive(session, userMessage, employeeId, onStep) {
     };
   }
   const base = dt.now();
-  const handlers = makeHandlers(base);
+  const handlers = makeHandlers(base, employeeId);
   const system = buildSystemPrompt(store.getProfile(), base, employeeId);
   const empTools = toolsFor(employeeId);
 

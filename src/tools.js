@@ -9,6 +9,7 @@ const employees = require("./employees");
 const budget = require("./budget");
 const { ingestWebsite } = require("./ingest");
 const media = require("./media");
+const memory = require("./memory");
 
 const PLATFORMS = ["instagram", "facebook", "tiktok"];
 
@@ -365,6 +366,35 @@ const toolSchemas = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "remember",
+    description: "Save something the owner has told you so you still know it in future conversations — a preference ('call me Tez'), a standing rule ('we never discount'), a person, a goal, or a fact about how they work. ONLY save what the owner has actually said or confirmed; never save a guess, and never save something already in the business profile or knowledge base.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fact: { type: "string", description: "The thing to remember, in one short sentence, written as a fact ('Terry prefers to be called Tez')" },
+        category: { type: "string", enum: ["preference", "business", "person", "rule", "goal", "other"], description: "What kind of fact this is" },
+      },
+      required: ["fact"],
+    },
+  },
+  {
+    name: "recall",
+    description: "Search what you've remembered about this owner and business. Use before asking the owner something they may have already told you.",
+    input_schema: {
+      type: "object",
+      properties: { about: { type: "string", description: "What you're trying to remember, e.g. 'pricing rules' or 'his name'. Leave blank for everything." } },
+    },
+  },
+  {
+    name: "forget",
+    description: "Delete a remembered fact, when the owner says it's wrong or no longer true. Pass the memory id from recall, or words from the fact.",
+    input_schema: {
+      type: "object",
+      properties: { fact: { type: "string", description: "The memory id, or a phrase from the fact to forget" } },
+      required: ["fact"],
+    },
+  },
+  {
     name: "research_competitor",
     description: "Read a competitor's website (crawls their real pages) and compare them against this business — their offer, strengths, and the gaps we can use. Use when the user names a competitor or asks who/what they're up against.",
     input_schema: {
@@ -376,7 +406,7 @@ const toolSchemas = [
 ];
 
 // ---- handlers ---------------------------------------------------------------
-function makeHandlers(base = dt.now()) {
+function makeHandlers(base = dt.now(), employeeId) {
   return {
     async ingest_website(input) {
       try {
@@ -658,6 +688,33 @@ function makeHandlers(base = dt.now()) {
 
     get_knowledge() {
       return { ok: true, content: JSON.stringify(store.getKnowledge()) };
+    },
+
+    remember(input) {
+      const out = memory.remember(input.fact, { category: input.category, employee: employeeId });
+      if (!out.saved) return { ok: false, content: out.reason || "Couldn't save that." };
+      return {
+        ok: true,
+        content: out.duplicate
+          ? `Already remembered that one — noted that it came up again.`
+          : `Remembered: "${out.record.text}". It'll be there next time, and the owner can see or delete it in Settings → What your AI remembers.`,
+        action: { type: "memory", record: out.record },
+      };
+    },
+
+    recall(input) {
+      const hits = memory.search(input && input.about, 10);
+      if (!hits.length) {
+        return { ok: true, content: memory.all().length ? "Nothing remembered about that." : "Memory is empty so far — nothing has been saved yet." };
+      }
+      return { ok: true, content: hits.map((m) => `${m.id}: ${m.text}`).join("\n") };
+    },
+
+    forget(input) {
+      const out = memory.forget(input.fact);
+      return out.removed
+        ? { ok: true, content: `Forgotten (${out.removed} item${out.removed > 1 ? "s" : ""} removed).`, action: { type: "memory", removed: out.removed } }
+        : { ok: false, content: "Couldn't find a remembered fact matching that." };
     },
 
     async generate_image(input) {

@@ -469,7 +469,21 @@
         fab.classList.add("active");
         if (!greeted) {
           greeted = true;
-          add("bot", "I'm right here. Ask me anything, or tell me to do something — write posts, build an automation, change your website.");
+          // Pick the thread back up where it was left — this little panel is
+          // the one the owner uses most, so losing its thread on a page
+          // change was the most annoying version of the forgetting problem.
+          HL.api("/api/chat/history?thread=assistant")
+            .then(function (out) {
+              var t = (out && out.transcript) || [];
+              if (!t.length) {
+                add("bot", "I'm right here. Ask me anything, or tell me to do something — write posts, build an automation, change your website.");
+                return;
+              }
+              t.slice(-8).forEach(function (m) { if (m.text) add(m.role === "user" ? "user" : "bot", m.text); });
+            })
+            .catch(function () {
+              add("bot", "I'm right here. Ask me anything, or tell me to do something — write posts, build an automation, change your website.");
+            });
         }
         setTimeout(function () { input.focus(); }, 180);
       } else {
@@ -555,7 +569,7 @@
 
       var think = thinkBlock();
       var settled = false;
-      var payload = { sessionId: "fab-" + HL.sessionId, message: text };
+      var payload = { thread: "assistant", message: text };
       var startPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
       var job = HL.jobStart ? HL.jobStart(startPage, text.slice(0, 42)) : null;
 

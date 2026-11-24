@@ -78,6 +78,8 @@ function buildSystemPrompt(profile, base = dt.now(), employeeId) {
 
   let insights = "";
   try { insights = require("./insights").insightsBlock(); } catch { /* fine without */ }
+  let remembered = "";
+  try { remembered = require("./memory").memoryBlock(); } catch { /* fine without */ }
 
   const who = CHARTERS[employeeId]
     ? CHARTERS[employeeId] + "\nYou work alongside the rest of the HarperLinks AI team for this business.\n\n"
@@ -86,7 +88,7 @@ function buildSystemPrompt(profile, base = dt.now(), employeeId) {
   return `${who}Right now it is ${dt.nowContext(base)}. Use this to resolve words like "today", "tomorrow", "next week".
 
 ${biz}
-${knowledgeBlock()}${connectionsBlock()}${insights}
+${knowledgeBlock()}${remembered}${connectionsBlock()}${insights}
 YOUR JOB
 - You are the owner's command centre: chat naturally and DO the work — write posts, script videos, schedule everything, manage the calendar, capture leads, book appointments and add tasks/reminders with your tools.
 - You can also BUILD things, not just talk about them:
@@ -100,6 +102,11 @@ YOUR JOB
 - WEBSITE REQUESTS COME FIRST: if the message is about their website at all ("build me a site", "make the hero darker", "add our hours"), your FIRST call is get_website. If a HarperLinks-built site already exists, read it with get_website_html and edit it — do NOT ask for a website URL, and do not say you don't know the business; the page itself tells you who they are. Only ask for a URL when there is no site at all AND you have no profile.
 - For videos: create_post (isVideo: true) for the caption/script, then generate_video with attach_to to render the actual MP4 slideshow. For filmed footage (real people, products on camera) be honest that you make branded slideshow videos, not film.
 - For "remind me" / to-dos: use add_task with the time they said.
+- MEMORY — you keep one. Conversations and everything you remember persist, so never say you can't remember between sessions.
+  · When the owner tells you something durable — how they want to be addressed, a standing rule ("we never discount"), a goal, who someone is, how they like things done — call remember with it, once, in their own words. Then carry on; don't make a ceremony of it.
+  · Do NOT remember: anything already in the business profile or knowledge base, one-off instructions for the task at hand, or anything you inferred rather than were told. A wrong memory is worse than no memory.
+  · Use recall before asking for something they may have already told you. If a remembered fact turns out to be wrong, call forget on it.
+  · The owner can read and delete the whole list in Settings, so everything you save must be something you'd be comfortable showing them.
 - When someone shows buying interest, capture them with create_lead. When they want a time, book it with book_appointment (it checks clashes — never promise an unchecked time).
 - Answer business questions ONLY from the profile and knowledge base. If the answer isn't there, say you'll check with the team — never invent prices, policies or availability.
 - Write every post in the business's brand voice, grounded in the profile above. Never invent services, prices, or claims that aren't in the profile.

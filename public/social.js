@@ -48,6 +48,13 @@
       var head = HL.el("div", "panel-head");
       head.appendChild(HL.el("h2", null, opts.title || "Your AI team"));
       head.appendChild(HL.el("span", "hint", opts.hint || "Tell it what you need — it does the work"));
+      var fresh = HL.el("button", "btn ghost sm chat-fresh", "Start fresh");
+      fresh.title = "Clears this conversation. What the AI remembers about your business stays.";
+      fresh.addEventListener("click", function () {
+        if (!confirm("Clear this conversation? What your AI remembers about the business stays saved.")) return;
+        HL.post("/api/chat/clear", { thread: thread }).then(function () { HL.navigate(); });
+      });
+      head.appendChild(fresh);
       panel.appendChild(head);
       scroll = HL.el("div", "chat-scroll");
       panel.appendChild(scroll);
@@ -60,13 +67,18 @@
       return el;
     }
 
+    /* The thread this panel is talking in. Stable (per employee, not per page
+       load), so the conversation is still there after a refresh. */
+    var thread = opts.thread || opts.employee || "main";
+
+    var greetEl = null;
     if (opts.greet) {
-      var greet = HL.el("div", "msg bot", opts.greet);
+      greetEl = HL.el("div", "msg bot", opts.greet);
       if (opts.greetSmall) {
         var sm = HL.el("span", "small", opts.greetSmall);
-        greet.appendChild(sm);
+        greetEl.appendChild(sm);
       }
-      scroll.appendChild(greet);
+      scroll.appendChild(greetEl);
     }
 
     function addThinking(steps) {
@@ -250,6 +262,36 @@
       }
     }
 
+    /* ---------- the conversation so far ----------
+       Drawn from the server's saved transcript. Tool payloads are never
+       replayed — only what was said and the step list, so a reloaded page
+       looks like the chat you left, not a dump of machine chatter. */
+    var histLoaded = false;
+    function loadHistory() {
+      if (histLoaded) return;
+      histLoaded = true;
+      HL.api("/api/chat/history?thread=" + encodeURIComponent(thread))
+        .then(function (out) {
+          var t = (out && out.transcript) || [];
+          if (!t.length) return;
+          // Older turns go above the greeting, which stays as the sign-off
+          // line; simpler to just drop the greeting once there's real history.
+          if (greetEl && greetEl.parentNode) greetEl.parentNode.removeChild(greetEl);
+          var marker = HL.el("div", "chat-resume", "Earlier in this conversation");
+          scroll.appendChild(marker);
+          t.forEach(function (m) {
+            if (m.role === "user") addMsg("user", m.text);
+            else {
+              if (m.steps && m.steps.length) addThinking(m.steps);
+              if (m.text) addMsg("bot", m.text);
+            }
+          });
+          scroll.scrollTop = scroll.scrollHeight;
+        })
+        .catch(function () { /* no history is not an error */ });
+    }
+    loadHistory();
+
     var sending = false;
     var firstSent = false;
     function send(text) {
@@ -263,7 +305,7 @@
       input.value = "";
       benchStatus(true);
 
-      var payload = { sessionId: HL.sessionId, message: text.trim(), employee: opts.employee || undefined };
+      var payload = { thread: thread, message: text.trim(), employee: opts.employee || undefined };
       var live = startLiveThinking();
       var settled = false;
       var startPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
