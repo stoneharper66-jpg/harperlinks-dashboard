@@ -1492,3 +1492,26 @@ body{overflow-x:hidden}
 .ct-ico{flex:none;font-size:15px}
 .ct-go{margin-left:auto;color:var(--dim);font-weight:700}
 .cc.engaged .cc-today{display:none}
+
+/* ===== CRM pipeline fits the screen =====
+   Seven fixed-width columns forced a sideways scroll. A fluid grid fits
+   them all on a laptop and wraps neatly on anything smaller. */
+.kanban{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;overflow:visible;padding-bottom:4px}
+.kcol{flex:none;min-width:0}
+
+/* ===== analytics, Shopify-style =====
+   Small label, big number, honest delta, quiet spark. White cards, tight grid. */
+.ana-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.ana-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px 12px;
+  box-shadow:0 1px 3px rgba(14,17,22,.04);display:flex;flex-direction:column;gap:2px;min-width:0}
+.ana-label{font-size:12px;font-weight:600;color:var(--muted)}
+.ana-value{font-family:var(--head);font-weight:750;font-size:26px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ana-sub{font-size:12px;color:var(--dim)}
+.ana-sub b.up{color:var(--ok)}
+.ana-sub b.down{color:var(--bad)}
+.ana-spark{display:flex;align-items:flex-end;gap:2px;height:26px;margin-top:8px}
+.ana-spark i{flex:1;min-width:2px;border-radius:2px 2px 0 0;background:rgba(10,109,216,.25)}
+.ana-spark i.hot{background:var(--accent)}
+.ana-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.ana-two .panel{margin:0}
+@media(max-width:1100px){.ana-grid{grid-template-columns:repeat(2,1fr)}.ana-two{grid-template-columns:1fr}}

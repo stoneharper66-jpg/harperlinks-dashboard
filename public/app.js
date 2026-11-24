@@ -141,11 +141,13 @@
     setTimeout(function () { pop.remove(); }, 3900);
   };
 
-  /* visible AI usage — everyone sees their own meter, admins see main's */
+  /* visible AI usage — HQ bookkeeping, so admins only. Customers pay a flat
+     plan; showing them an internal cost meter just reads as a worry. */
   HL.refreshBudget = function () {
+    var box = HL.$("usageBox");
+    if (!box) return;
+    if (!HL.user || HL.user.role !== "admin") { box.hidden = true; return; }
     HL.api("/api/budget").then(function (b) {
-      var box = HL.$("usageBox");
-      if (!box) return;
       var pct = Math.min(100, Math.round((b.spent / Math.max(0.01, b.cap)) * 100));
       box.hidden = false;
       box.querySelector(".ub-label").textContent = "AI usage · A$" + b.spent.toFixed(2) + " of A$" + b.cap;

@@ -1172,40 +1172,76 @@
           root.appendChild(bar);
 
           var t = stats.totals;
+
+          // Shopify-style metric card: small label, big number, honest delta
+          // (second half of the period vs the first), spark bars per day.
+          function anaCard(label, value, sub, seriesKey) {
+            var card = HL.el("div", "ana-card");
+            card.appendChild(HL.el("div", "ana-label", label));
+            card.appendChild(HL.el("div", "ana-value", String(value)));
+            var subEl = HL.el("div", "ana-sub");
+            if (seriesKey) {
+              var vals = stats.series.map(function (d) { return d[seriesKey] || 0; });
+              var half = Math.floor(vals.length / 2);
+              var a = vals.slice(0, half).reduce(function (x, y) { return x + y; }, 0);
+              var b2 = vals.slice(half).reduce(function (x, y) { return x + y; }, 0);
+              var delta = a === 0 ? (b2 > 0 ? 100 : 0) : Math.round(((b2 - a) / a) * 100);
+              subEl.innerHTML = (delta ? "<b class='" + (delta > 0 ? "up" : "down") + "'>" + (delta > 0 ? "↑ " : "↓ ") + Math.abs(delta) + "%</b> vs prior · " : "") + HL.esc(sub);
+            } else subEl.textContent = sub;
+            card.appendChild(subEl);
+            if (seriesKey) {
+              var spark = HL.el("div", "ana-spark");
+              var vv = stats.series.map(function (d) { return d[seriesKey] || 0; });
+              var max = Math.max.apply(null, vv.concat([1]));
+              var peak = vv.indexOf(Math.max.apply(null, vv));
+              vv.slice(-30).forEach(function (v, i2) {
+                var bar2 = HL.el("i" + "");
+                bar2.style.height = Math.max(8, Math.round((v / max) * 100)) + "%";
+                if (i2 === peak && v > 0) bar2.classList.add("hot");
+                spark.appendChild(bar2);
+              });
+              card.appendChild(spark);
+            }
+            return card;
+          }
+
           root.appendChild(HL.el("h3", "cmd-h", "Business performance"));
-          var row = HL.el("div", "grid cols-4");
-          row.appendChild(HL.stat("Leads", t.leads, t.conversion === null ? "no conversions yet" : t.conversion + "% convert to won"));
-          row.appendChild(HL.stat("Appointments", t.appointments, t.upcoming + " upcoming"));
-          row.appendChild(HL.stat("Posts published", t.postsPublished, "pipeline (preview mode)"));
-          row.appendChild(HL.stat("Automation runs", stats.series.reduce(function (n, d) { return n + d.automations; }, 0), "in this period"));
-          row.style.marginBottom = "16px";
+          var row = HL.el("div", "ana-grid");
+          row.appendChild(anaCard("New leads", t.leads, t.conversion === null ? "no conversions yet" : t.conversion + "% become customers", "leads"));
+          row.appendChild(anaCard("Appointments", t.appointments, t.upcoming + " coming up", "appointments"));
+          row.appendChild(anaCard("Posts published", t.postsPublished, "via the pipeline", "published"));
+          row.appendChild(anaCard("Automation runs", stats.series.reduce(function (n, d) { return n + d.automations; }, 0), "in this period", "automations"));
           root.appendChild(row);
 
           /* -- what the AI team actually did, counted not claimed -- */
           Promise.all([HL.api("/api/activity"), HL.api("/api/budget"), HL.api("/api/tasks")]).then(function (xa) {
             var acts = xa[0] || [], bud = xa[1] || {}, tasks = xa[2] || [];
             var hdr = HL.el("h3", "cmd-h", "Your AI team's work");
-            var row2 = HL.el("div", "grid cols-4");
+            var row2 = HL.el("div", "ana-grid");
             var byAI = acts.filter(function (a) { return ["content", "ingested", "research", "auto", "published"].indexOf(a.type) >= 0; });
-            row2.appendChild(HL.stat("Actions logged", acts.length, "everything is auditable"));
-            row2.appendChild(HL.stat("AI work items", byAI.length, "posts, scans, research, publishes"));
-            row2.appendChild(HL.stat("Open tasks", tasks.filter(function (x) { return x.status !== "done"; }).length, "handed to you"));
-            row2.appendChild(HL.stat("AI spend", "A$" + Number(bud.spent || 0).toFixed(2), "of A$" + Number(bud.cap || 50).toFixed(0) + " this month"));
-            row2.style.marginBottom = "16px";
+            row2.appendChild(anaCard("Actions logged", acts.length, "everything is auditable"));
+            row2.appendChild(anaCard("AI work items", byAI.length, "posts, scans, research, publishes"));
+            row2.appendChild(anaCard("Open tasks", tasks.filter(function (x) { return x.status !== "done"; }).length, "handed to you"));
+            if (HL.user && HL.user.role === "admin") {
+              row2.appendChild(anaCard("AI spend", "A$" + Number(bud.spent || 0).toFixed(2), "of A$" + Number(bud.cap || 50).toFixed(0) + " this month (HQ only)"));
+            } else {
+              row2.appendChild(anaCard("Team on duty", "—", "see AI Team for who's working"));
+            }
             root.insertBefore(row2, row.nextSibling);
             root.insertBefore(hdr, row2);
           }).catch(function () {});
 
+          var two = HL.el("div", "ana-two");
           var c1 = HL.panel("Growth", "Leads & appointments per day");
           c1.appendChild(HL.lineChart(stats.series, ["leads", "appointments"], COLORS));
           c1.appendChild(HL.legend(["Leads", "Appointments"], COLORS));
-          root.appendChild(c1);
+          two.appendChild(c1);
 
           var c2 = HL.panel("Content", "Posts published & scheduled per day");
-          c2.style.marginTop = "16px";
           c2.appendChild(HL.lineChart(stats.series, ["published", "scheduled"], [COLORS[1], COLORS[2]]));
           c2.appendChild(HL.legend(["Published", "Scheduled"], [COLORS[1], COLORS[2]]));
-          root.appendChild(c2);
+          two.appendChild(c2);
+          root.appendChild(two);
 
           /* -- what's working: the learning loop, honest about its data -- */
           var ip = HL.panel("What's working", "The team reads this and shapes new content toward it");
@@ -1491,7 +1527,8 @@
           root.appendChild(ep);
         }
 
-        /* ---- spend cap ---- */
+        /* ---- spend cap (HQ bookkeeping — customers pay a flat plan) ---- */
+        if (HL.user && HL.user.role === "admin") {
         var bp = HL.panel("AI spend cap", bud.month);
         var bb = HL.el("div", "panel-body");
         var bar = HL.el("div", "spend-bar");
@@ -1529,6 +1566,7 @@
           "The AI spends freely under this ceiling and stops dead when it's hit. Rough costs: chat ~1c a turn, image ~6c, video ~5c per second."));
         bp.appendChild(bb);
         root.appendChild(bp);
+        }
 
         var panel = HL.panel("Business knowledge base", kb.updatedAt ? "Updated " + HL.fmtWhen(kb.updatedAt) : "Not filled in yet");
         var body = HL.el("div", "panel-body");
