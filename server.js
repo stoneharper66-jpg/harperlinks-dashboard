@@ -141,7 +141,15 @@ app.post("/api/auth/forgot", async (req, res) => {
     let out = { sent: false };
     if (notify.configured()) {
       out = await notify.sendTo(started.user.email, "Reset your HarperLinks password",
-        `Someone asked to reset the password for your HarperLinks account.\n\nSet a new one here (the link lasts one hour):\n${link}\n\nIf this wasn't you, ignore this email — your password hasn't changed.`);
+        `Someone asked to reset the password for your HarperLinks account.\n\nSet a new one here (the link lasts one hour):\n${link}\n\nIf this wasn't you, ignore this email — your password hasn't changed.`,
+        notify.wrapHtml({
+          title: "Reset your password",
+          bodyHtml: `Someone asked to reset the password for your HarperLinks account.<br><br>` +
+            `The button below takes you to a page where you choose a new one. The link lasts <b>one hour</b> and works once.<br><br>` +
+            `If this wasn't you, just ignore this email — your password hasn't changed.`,
+          buttonText: "Choose a new password",
+          buttonUrl: link,
+        }));
     }
     if (!out.sent) {
       // Email isn't configured (or failed). The operator can retrieve the link
@@ -339,6 +347,43 @@ app.post("/api/auth/password", (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
+});
+
+// ---- admin: email (SMTP) setup ----------------------------------------------
+// So Stone can finish email from the Settings page instead of editing .env.
+// The password is write-only: the GET never returns it, only whether one is set.
+
+app.get("/api/settings/email", adminOnly, (_req, res) => {
+  const notify = require("./src/notify");
+  const c = notify.smtpConfig();
+  res.json({ configured: notify.configured(), host: c.host, port: c.port, user: c.user, hasPass: !!c.pass });
+});
+
+app.post("/api/settings/email", adminOnly, (req, res) => {
+  const { host, port, user, pass } = req.body || {};
+  const saved = store.getGlobal("smtp", {});
+  const next = {
+    host: String(host || saved.host || "").trim(),
+    port: String(port || saved.port || "465").trim(),
+    user: String(user || saved.user || "").trim(),
+    pass: pass ? String(pass) : saved.pass || "", // blank = keep the old one
+  };
+  if (!next.host || !next.user) return res.status(400).json({ error: "Host and email are both needed." });
+  store.saveGlobal("smtp", next);
+  tenant.run(tenant.MAIN, () => store.logActivity("system", "Email (SMTP) settings updated"));
+  res.json({ ok: true, configured: !!(next.host && next.user && next.pass) });
+});
+
+// Prove it works: send a real test email to the team address, report honestly.
+app.post("/api/settings/email/test", adminOnly, async (_req, res) => {
+  const notify = require("./src/notify");
+  const out = await notify.sendTo(notify.NOTIFY_EMAIL, "HarperLinks test email",
+    "This is the test email from your HarperLinks dashboard. If you're reading it, email is working.",
+    notify.wrapHtml({
+      title: "Email is working 🎉",
+      bodyHtml: "This is the test email from your HarperLinks dashboard.<br><br>Password resets, customer welcome emails and your daily handovers will all send from here now.",
+    }));
+  res.status(out.sent ? 200 : 400).json(out);
 });
 
 // ---- admin: customer accounts ----------------------------------------------

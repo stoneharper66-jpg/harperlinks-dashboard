@@ -1,41 +1,41 @@
 {
   "configured": true,
-  "sourceUrl": "https://harperholistic.xyz/",
-  "ingestedAt": "2026-11-23T03:15:59.827Z",
+  "sourceUrl": "http://www.harperholistic.xyz/",
+  "ingestedAt": "2026-11-23T11:00:25.846Z",
   "name": "HarperHolistic",
-  "businessType": "Healing inspiration card deck subscription",
-  "tagline": "Boundaries are my Love Language",
+  "businessType": "Holistic healing inspiration card decks and membership",
+  "tagline": "Boundaries are my Love Language: Speak your truth and protect your peace",
   "services": [
     "Boundaries are my Love Language card deck",
-    "Cancer Care Compassionate Communication cards",
+    "Cancer Care Cards",
     "Momma's Earth Magick card deck",
     "Guidebook, affirmations & journal",
-    "Weekly reflections",
+    "Daily card draws",
     "Personal messages from Gillian"
   ],
-  "audience": "People on a personal healing journey seeking boundaries, grounding, and emotional support",
-  "tone": "compassionate, spiritual, nurturing",
+  "audience": "People on a healing journey seeking boundaries, emotional support and spiritual grounding",
+  "tone": "gentle, compassionate, spiritual",
   "location": null,
   "keywords": [
     "healing cards",
     "boundaries",
-    "affirmations",
+    "holistic healing",
     "cancer care",
-    "rituals",
-    "intuition",
+    "earth magick",
+    "affirmations",
     "journal",
-    "membership"
+    "intuition"
   ],
   "photos": [
-    "https://harperholistic.xyz/images/cards/card-07.webp",
-    "https://harperholistic.xyz/images/cards/card-12.webp",
-    "https://harperholistic.xyz/images/cards/back.webp",
-    "https://harperholistic.xyz/images/cancer-care/card-01.webp",
-    "https://harperholistic.xyz/images/earth-magick/card-01.webp"
+    "http://www.harperholistic.xyz/images/cards/card-07.webp",
+    "http://www.harperholistic.xyz/images/cards/card-12.webp",
+    "http://www.harperholistic.xyz/images/cards/back.webp",
+    "http://www.harperholistic.xyz/images/cancer-care/card-01.webp",
+    "http://www.harperholistic.xyz/images/earth-magick/card-01.webp"
   ],
   "pagesRead": [
     {
-      "url": "https://harperholistic.xyz/",
+      "url": "http://www.harperholistic.xyz/",
       "title": "HarperHolistic"
     }
   ]

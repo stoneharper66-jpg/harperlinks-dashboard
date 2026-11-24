@@ -375,7 +375,7 @@
     { id: "appointments", label: "Appointments", icon: IC.appointments },
     { id: "analytics", label: "Analytics", icon: IC.analytics },
     { sep: "Account" },
-    { id: "integrations", label: "Connections", icon: IC.integrations },
+    { id: "integrations", label: "Connections", icon: IC.integrations, admin: true },
     { id: "team", label: "My Team", icon: IC.team },
     { id: "settings", label: "Settings", icon: IC.settings },
     { id: "billing", label: "Billing", icon: IC.billing },

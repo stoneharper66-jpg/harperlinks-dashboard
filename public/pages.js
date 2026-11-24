@@ -134,6 +134,42 @@
 
         root.appendChild(bench);
 
+        // What's happening, in plain English — Terry-proof. Four short lines,
+        // real numbers, each one tap from the thing itself. Gone once you chat.
+        Promise.all([HL.api("/api/report?quick=1"), HL.api("/api/activity")]).then(function (td) {
+          var facts = (td[0] && td[0].facts) || {};
+          var acts = td[1] || [];
+          var today = new Date().toDateString();
+          var doneToday = acts.filter(function (a) { return new Date(a.at).toDateString() === today; });
+          var lines = [];
+          if (facts.scheduledAhead) lines.push(["📅", facts.scheduledAhead + " post" + (facts.scheduledAhead > 1 ? "s are" : " is") + " lined up and going out on schedule", "social"]);
+          if (facts.drafts) lines.push(["✍️", facts.drafts + " post" + (facts.drafts > 1 ? "s are" : " is") + " waiting for your OK", "social"]);
+          if (facts.newLeads) lines.push(["👤", facts.newLeads + " new enquir" + (facts.newLeads > 1 ? "ies" : "y") + " came in today", "crm"]);
+          if (facts.overdueFollowUps) lines.push(["⏰", facts.overdueFollowUps + " customer" + (facts.overdueFollowUps > 1 ? "s" : "") + " need" + (facts.overdueFollowUps > 1 ? "" : "s") + " a follow-up call", "crm"]);
+          if (doneToday.length) lines.push(["🤖", "Your AI team did " + doneToday.length + " thing" + (doneToday.length > 1 ? "s" : "") + " today — tap to see the list", function () {
+            var body = HL.el("div");
+            doneToday.slice(0, 20).forEach(function (a) {
+              var r = HL.el("div");
+              r.style.cssText = "padding:9px 2px;border-bottom:1px solid var(--border);font-size:13.5px;color:var(--text)";
+              r.innerHTML = HL.esc(a.message) + ' <span style="color:var(--dim);font-size:12px">· ' + HL.esc(HL.fmtWhen(a.at)) + "</span>";
+              body.appendChild(r);
+            });
+            HL.modal("What your team did today", body);
+          }]);
+          if (!lines.length) lines.push(["🌤", "All quiet — nothing needs you right now", null]);
+          var panel = HL.el("div", "cc-today");
+          panel.appendChild(HL.el("div", "cc-today-h", "What's happening"));
+          lines.slice(0, 4).forEach(function (l) {
+            var r = HL.el("button", "cc-today-row" + (l[2] ? "" : " still"));
+            r.type = "button";
+            r.innerHTML = '<span class="ct-ico">' + l[0] + '</span><span>' + HL.esc(l[1]) + "</span>" + (l[2] ? '<span class="ct-go">→</span>' : "");
+            if (typeof l[2] === "function") r.addEventListener("click", l[2]);
+            else if (l[2]) r.addEventListener("click", function () { location.hash = "#/" + l[2]; });
+            panel.appendChild(r);
+          });
+          if (!empDef) root.insertBefore(panel, stripWrap);
+        }).catch(function () {});
+
         // One quiet line, only when something genuinely blocks the automation —
         // not a dashboard, just the next step.
         HL.api("/api/connections").then(function (conn) {
@@ -1249,6 +1285,11 @@
       return Promise.all(reqs).then(function (out) {
         var ints = out[0], conns = out[1], ci = out[2];
         var root = HL.el("div");
+        if (!isAdmin) {
+          // Customers don't manage plumbing — the team does it for them.
+          root.appendChild(HL.emptyState("🔌", "Your connections are managed for you by the HarperLinks team. Want something linked up? Just ask — message us or tell your AI team.", "Ask the team", function () { location.hash = "#/"; }));
+          return root;
+        }
         root.appendChild(HL.el("p", "sec-intro", "Nothing shows connected unless it really is."));
 
         // Stone's fast lane: one click into this account's publishing engine
@@ -1257,8 +1298,9 @@
           var fast = HL.el("div", "admin-connect");
           var txt = HL.el("div");
           txt.innerHTML = ci && ci.configured
-            ? "<b>Team fast-connect</b><span>Open the publishing engine, link the socials in its Social Planner, then re-check — the rows below flip green on their own.</span>"
-            : "<b>Team fast-connect</b><span>No publishing engine on this account yet — add the token in Customer Accounts first.</span>";
+            ? "<b>Connect this account's socials — 3 steps, no passwords typed here</b>" +
+              "<span>1. Open the connect window below. &nbsp;2. In Social Planner, click each platform — it uses Instagram/Facebook's own login popup (the customer approves on their phone if needed). &nbsp;3. Come back and hit Re-check — the rows flip green on their own.</span>"
+            : "<b>Connect this account's socials</b><span>No publishing engine on this account yet — add the token in Customer Accounts first, then this becomes a 3-step job.</span>";
           fast.appendChild(txt);
           var btns = HL.el("div", "ac-btns");
           if (ci && ci.configured) {
@@ -1402,6 +1444,52 @@
         var intro = HL.el("p", "sec-intro");
         intro.innerHTML = "Your AI team answers customers only from what's in here.";
         root.appendChild(intro);
+
+        /* ---- email setup (admin only) ---- */
+        if (HL.user && HL.user.role === "admin") {
+          var ep = HL.panel("Email", "Password resets, customer welcomes and your daily handovers send from here");
+          var eb = HL.el("div", "panel-body");
+          HL.api("/api/settings/email").then(function (cfg) {
+            var state = HL.el("p", "sec-intro");
+            state.style.margin = "0 0 14px";
+            state.innerHTML = cfg.configured
+              ? "✅ <b>Email is on</b> — sending as " + HL.esc(cfg.user)
+              : "Email isn't sending yet. For Gmail: turn on 2-Step Verification, then create an <b>App Password</b> at myaccount.google.com/apppasswords and paste it below. Takes about 3 minutes.";
+            eb.appendChild(state);
+            var host = HL.input("smtp.gmail.com", cfg.host || "smtp.gmail.com");
+            var user = HL.input("you@gmail.com", cfg.user || "harperlinksteam@gmail.com");
+            var pass = HL.input(cfg.hasPass ? "•••••••• (saved — leave blank to keep)" : "the 16-letter App Password");
+            pass.type = "password";
+            var row = HL.el("div", "frow");
+            row.appendChild(HL.field("Email address", user));
+            row.appendChild(HL.field("Mail server", host));
+            eb.appendChild(row);
+            eb.appendChild(HL.field("App Password", pass));
+            var btns = HL.el("div");
+            btns.style.cssText = "display:flex;gap:8px;margin-top:4px";
+            var save = HL.el("button", "btn sm", "Save");
+            save.addEventListener("click", function () {
+              save.disabled = true;
+              HL.post("/api/settings/email", { host: host.value, user: user.value, pass: pass.value })
+                .then(function () { HL.toast("Email settings saved"); save.disabled = false; })
+                .catch(function (e2) { HL.toast(e2.message, true); save.disabled = false; });
+            });
+            btns.appendChild(save);
+            var test = HL.el("button", "btn ghost sm", "Send me a test email");
+            test.addEventListener("click", function () {
+              test.disabled = true; test.textContent = "Sending…";
+              HL.post("/api/settings/email/test", {})
+                .then(function (o) { HL.toast("Sent to " + o.to + " — check your inbox"); })
+                .catch(function (e2) { HL.toast(e2.reason || e2.message, true); })
+                .then(function () { test.disabled = false; test.textContent = "Send me a test email"; });
+            });
+            btns.appendChild(test);
+            eb.appendChild(btns);
+          });
+          ep.appendChild(eb);
+          ep.style.marginBottom = "16px";
+          root.appendChild(ep);
+        }
 
         /* ---- spend cap ---- */
         var bp = HL.panel("AI spend cap", bud.month);

@@ -86,5 +86,133 @@
     "units": 1,
     "cost": 0.045,
     "note": "chat turn"
+  },
+  {
+    "at": "2026-11-23T10:20:23.293Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-23T10:21:33.053Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-23T10:52:15.384Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-23T10:55:42.796Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "chat turn"
+  },
+  {
+    "at": "2026-11-23T11:00:44.161Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:01:03.822Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:01:21.848Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:01:41.713Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:01:59.862Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:02:20.419Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:02:37.133Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:02:57.111Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:03:14.540Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:03:36.001Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:03:53.400Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
+  },
+  {
+    "at": "2026-11-23T11:04:15.389Z",
+    "month": "2026-11",
+    "kind": "claude.message",
+    "units": 1,
+    "cost": 0.045,
+    "note": "planning the month"
   }
 ]

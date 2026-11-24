@@ -304,5 +304,11 @@
     "type": "auth",
     "message": "Password reset requested for harperlinksteam@gmail.com — link is in the server log (email not configured)",
     "refId": null
+  },
+  {
+    "at": "2026-11-24T00:06:17.860Z",
+    "type": "system",
+    "message": "Nightly backup done — harperlinks-2026-11-24.tgz (4613 KB), last 14 kept",
+    "refId": null
   }
 ]

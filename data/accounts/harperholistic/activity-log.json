@@ -190,5 +190,95 @@
     "type": "employee",
     "message": "Flynn's operating mode set to autonomous",
     "refId": null
+  },
+  {
+    "at": "2026-11-23T10:19:24.682Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed into this account to help out",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T10:19:27.880Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed back out of this account",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T10:20:03.431Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed into this account to help out",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T10:21:24.795Z",
+    "type": "ingested",
+    "message": "Read 1 page of HarperHolistic and found 5 photos",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T10:50:14.050Z",
+    "type": "employee",
+    "message": "Riley's operating mode set to assisted",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T10:55:36.304Z",
+    "type": "website",
+    "message": "Website draft saved — first draft",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:00:03.126Z",
+    "type": "website",
+    "message": "Website linked: http://www.harperholistic.xyz",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:00:08.319Z",
+    "type": "ingested",
+    "message": "Read 1 page of HarperHolistic and found 5 photos",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:00:20.970Z",
+    "type": "website",
+    "message": "Website linked: http://www.harperholistic.xyz",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:00:25.847Z",
+    "type": "ingested",
+    "message": "Read 1 page of HarperHolistic and found 5 photos",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:03:53.426Z",
+    "type": "content",
+    "message": "Sage planned 90 posts for HarperHolistic — scheduled across the month",
+    "refId": null
+  },
+  {
+    "at": "2026-11-23T11:04:15.419Z",
+    "type": "content",
+    "message": "Sage planned 90 posts for HarperHolistic — scheduled across the month",
+    "refId": null
+  },
+  {
+    "at": "2026-11-24T00:06:17.687Z",
+    "type": "published",
+    "message": "Published instagram post (preview — no platform connected) — \"Boundaries are my Love Language — a card deck for …\"",
+    "refId": "post_mwsp6fke6"
+  },
+  {
+    "at": "2026-11-24T01:29:44.653Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed into this account to help out",
+    "refId": null
+  },
+  {
+    "at": "2026-11-24T01:32:45.609Z",
+    "type": "auth",
+    "message": "stone harper (HarperLinks team) signed into this account to help out",
+    "refId": null
   }
 ]

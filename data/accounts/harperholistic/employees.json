@@ -14,7 +14,7 @@
   {
     "id": "support",
     "enabled": true,
-    "mode": "supervised",
+    "mode": "assisted",
     "activatedAt": "2026-11-23T03:15:59.830Z"
   },
   {
