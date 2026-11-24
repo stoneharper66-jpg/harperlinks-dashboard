@@ -151,4 +151,46 @@ function listCompetitors() {
   return store.getCol("competitors");
 }
 
-module.exports = { computeInsights, insightsBlock, researchCompetitor, listCompetitors, score };
+/**
+ * Find competitors without being handed a URL. Claude proposes likely rivals
+ * for this business type and area; we then CRAWL each candidate and throw away
+ * any site that doesn't load or isn't really a competitor. Nothing reaches the
+ * list unless its actual website was fetched and read — that's the guard
+ * against made-up names.
+ */
+async function findCompetitors(max = 3) {
+  const profile = store.getProfile();
+  if (!profile.configured) throw new Error("Read the business's website first.");
+  if (!HAS_KEY) throw new Error("Finding competitors needs the live AI.");
+  if (!budget.canSpend("claude.message", 1).ok) throw new Error("Monthly AI budget reached.");
+
+  const Anthropic = require("@anthropic-ai/sdk");
+  const client = new Anthropic();
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    output_config: { effort: "low" },
+    system: 'List real businesses that compete with the client described. Reply ONLY a JSON array of up to 6 items: [{"name": string, "url": "https://their-real-website"}]. Only include businesses you are confident actually exist with that website. If you are not sure of any, return [].',
+    messages: [{ role: "user", content: JSON.stringify({ businessType: profile.businessType, location: profile.location, services: profile.services, notTheirOwnSite: profile.sourceUrl }) }],
+  });
+  budget.record("claude.message", 1, "competitor hunt");
+  let candidates = [];
+  try {
+    const raw = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    candidates = JSON.parse(raw.replace(/^```(?:json)?/m, "").replace(/```\s*$/m, "").trim());
+  } catch { candidates = []; }
+
+  const found = [];
+  const own = new URL(profile.sourceUrl).hostname.replace(/^www\./, "");
+  for (const c of candidates) {
+    if (found.length >= max) break;
+    if (!c || !c.url) continue;
+    try {
+      if (new URL(c.url).hostname.replace(/^www\./, "") === own) continue; // not themselves
+      found.push(await researchCompetitor(c.url)); // crawls for real; throws if the site isn't there
+    } catch { /* candidate didn't survive contact with reality — drop it silently */ }
+  }
+  return { suggested: candidates.length, verified: found };
+}
+
+module.exports = { computeInsights, insightsBlock, researchCompetitor, listCompetitors, findCompetitors, score };

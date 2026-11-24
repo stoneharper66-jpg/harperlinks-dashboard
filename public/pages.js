@@ -229,7 +229,7 @@
           card.appendChild(HL.el("p", "emp-desc", e.description));
 
           var caps = HL.el("div", "emp-caps");
-          (e.capabilities || []).slice(0, 4).forEach(function (c) {
+          (e.capabilities || []).slice(0, 2).forEach(function (c) {
             caps.appendChild(HL.el("span", "emp-cap", c));
           });
           card.appendChild(caps);
@@ -274,10 +274,6 @@
           top.style.cursor = "pointer";
           top.addEventListener("click", function () { location.hash = "#/employee?emp=" + e.id; });
           acts.appendChild(chatB);
-          var WORKSPACES = { social: "social", support: "inbox", receptionist: "phone", sales: "crm", web: "website", manager: "analytics" };
-          var wsB = HL.el("button", "btn ghost sm", "Workspace");
-          wsB.addEventListener("click", function () { location.hash = "#/" + (WORKSPACES[e.id] || "overview"); });
-          acts.appendChild(wsB);
           card.appendChild(acts);
 
           grid.appendChild(card);
@@ -1272,8 +1268,18 @@
             var cp = HL.panel("Competition", "The team reads their actual websites — nothing invented");
             cp.style.marginTop = "16px";
             var addRow = HL.el("form", "comp-add");
-            var cu = HL.input("competitor-website.com.au");
-            var cb = HL.el("button", "btn sm", "Study them");
+            var findB = HL.el("button", "btn sm", "✦ Find them for me");
+            findB.type = "button";
+            findB.addEventListener("click", function () {
+              findB.disabled = true; findB.textContent = "Hunting — checking real sites…";
+              HL.post("/api/competitors/find", {}).then(function () {
+                HL.toast("Darcy's hunting — each candidate's real website gets checked. Back in a minute or two.");
+                setTimeout(function () { HL.navigate(); }, 75000);
+              }).catch(function (e2) { HL.toast(e2.message, true); findB.disabled = false; findB.textContent = "✦ Find them for me"; });
+            });
+            addRow.appendChild(findB);
+            var cu = HL.input("or paste one: competitor-website.com.au");
+            var cb = HL.el("button", "btn ghost sm", "Study them");
             cb.type = "submit";
             addRow.appendChild(cu); addRow.appendChild(cb);
             addRow.addEventListener("submit", function (ev) {

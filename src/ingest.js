@@ -337,6 +337,27 @@ async function ingestWebsite(rawUrl) {
     pagesRead: site.pages.map((p) => ({ url: p.url, title: p.title })),
   };
   store.saveProfile(profile);
+
+  // The scan also pre-fills the knowledge base — only the gaps, never
+  // overwriting anything the owner typed themselves. Everything here came
+  // off their own website, so it's theirs to correct, not ours to invent.
+  const kb = store.getKnowledge();
+  let kbTouched = false;
+  if (!kb.description && (profile.tagline || profile.businessType)) {
+    kb.description = [profile.name, profile.businessType, profile.tagline].filter(Boolean).join(" — ");
+    kbTouched = true;
+  }
+  if ((!kb.services || !kb.services.length) && profile.services.length) {
+    kb.services = profile.services.map((s) => ({ name: String(s).slice(0, 80), price: "" }));
+    kbTouched = true;
+  }
+  if (!kb.locations && profile.location) { kb.locations = profile.location; kbTouched = true; }
+  if (!kb.brandVoice && profile.tone) { kb.brandVoice = profile.tone; kbTouched = true; }
+  if (kbTouched) {
+    store.saveKnowledge(kb);
+    store.logActivity("ingested", "Filled the knowledge base in from the website — check Settings and fix anything that's off");
+  }
+
   store.logActivity("ingested",
     `Read ${site.pages.length} page${site.pages.length === 1 ? "" : "s"} of ${profile.name} and found ${site.images.length} photo${site.images.length === 1 ? "" : "s"}`);
   setScan({

@@ -1004,6 +1004,19 @@ app.get("/api/insights", (_req, res) => {
   res.json({ insights: insights.computeInsights(), competitors: insights.listCompetitors() });
 });
 
+// "Who's my competition?" — proposes rivals, then verifies each by actually
+// crawling their site; only survivors are saved. Slow (real fetches), so the
+// UI gets an immediate ack and polls /api/insights.
+app.post("/api/competitors/find", (req, res) => {
+  const accountId = tenant.current();
+  res.json({ ok: true, started: true });
+  tenant.run(accountId, () => {
+    require("./src/insights").findCompetitors()
+      .then((out) => tenant.run(accountId, () => store.logActivity("research", `Competitor hunt finished — ${out.verified.length} verified of ${out.suggested} suggested`)))
+      .catch((e) => console.error("find competitors:", e.message));
+  });
+});
+
 app.post("/api/competitors", async (req, res) => {
   try {
     res.json({ ok: true, competitor: await require("./src/insights").researchCompetitor((req.body || {}).url) });
