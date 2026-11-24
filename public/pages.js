@@ -1319,99 +1319,219 @@
 
   /* ================= INTEGRATIONS — boxless list ================= */
   HL.pages.integrations = {
-    title: "Integrations",
+    title: "Apps & Connections",
     render: function () {
       var isAdmin = HL.user && HL.user.role === "admin";
-      var reqs = [HL.api("/api/integrations"), HL.api("/api/connectors").catch(function () { return []; })];
-      if (isAdmin) reqs.push(HL.api("/api/ghl/connect-info").catch(function () { return null; }));
+      var reqs = [HL.api("/api/integrations")];
+      reqs.push(isAdmin ? HL.api("/api/connectors").catch(function () { return []; }) : Promise.resolve([]));
       return Promise.all(reqs).then(function (out) {
-        var ints = out[0], conns = out[1], ci = out[2];
+        var ints = out[0], conns = out[1];
         var root = HL.el("div");
-        if (!isAdmin) {
-          // Customers don't manage plumbing — the team does it for them.
-          root.appendChild(HL.emptyState("🔌", "Your connections are managed for you by the HarperLinks team. Want something linked up? Just ask — message us or tell your AI team.", "Ask the team", function () { location.hash = "#/"; }));
-          return root;
-        }
-        root.appendChild(HL.el("p", "sec-intro", "Nothing shows connected unless it really is."));
 
-        // Stone's fast lane: one click into this account's publishing engine
-        // to link socials, one click to re-check. Customers never see this.
-        if (isAdmin) {
-          var fast = HL.el("div", "admin-connect");
-          var txt = HL.el("div");
-          txt.innerHTML = ci && ci.configured
-            ? "<b>Connect this account's socials — 3 steps, no passwords typed here</b>" +
-              "<span>1. Open the connect window below. &nbsp;2. In Social Planner, click each platform — it uses Instagram/Facebook's own login popup (the customer approves on their phone if needed). &nbsp;3. Come back and hit Re-check — the rows flip green on their own.</span>"
-            : "<b>Connect this account's socials</b><span>No publishing engine on this account yet — add the token in Customer Accounts first, then this becomes a 3-step job.</span>";
-          fast.appendChild(txt);
-          var btns = HL.el("div", "ac-btns");
-          if (ci && ci.configured) {
-            var open = HL.el("a", "btn sm", "Open connect window ↗");
-            open.href = ci.url; open.target = "_blank"; open.rel = "noopener";
-            btns.appendChild(open);
+        var live = ints.filter(function (i) { return i.connected; }).length;
+        var intro = HL.el("p", "sec-intro");
+        intro.innerHTML = live
+          ? "<b>" + live + " connected.</b> Click Connect on any app, sign in, tap Authorise — that's the whole job. Nothing shows green unless it really is."
+          : "Click Connect, sign in, tap Authorise. No API keys, no passwords given to us — you approve it on the platform's own screen.";
+        root.appendChild(intro);
+
+        /* ---------- the connect flow ----------
+           Three real steps, the same three the platform runs:
+             1. we ask our publishing engine for the platform's consent URL
+             2. you sign in and authorise in a popup on the platform's domain
+             3. you pick which page/channel, and we attach it
+           Every state below comes from a real response. If the popup is
+           closed or the platform says no, it says so — nothing turns green
+           on hope. */
+        function connect(it) {
+          var status = null;
+          function say(msg, bad) {
+            HL.toast(msg, bad);
           }
-          var recheck = HL.el("button", "btn ghost sm", "Re-check status");
-          recheck.addEventListener("click", function () { HL.toast("Checking all connections…"); HL.navigate(); });
-          btns.appendChild(recheck);
-          fast.appendChild(btns);
-          root.appendChild(fast);
+          say("Opening " + it.name + "…");
+
+          // Pop the window FIRST, synchronously inside the click, or Safari
+          // blocks it as an unrequested popup. It gets the URL a moment later.
+          var pop = window.open("about:blank", "hl_connect_" + it.id,
+            "width=620,height=760,menubar=no,toolbar=no");
+          if (!pop) {
+            HL.toast("Your browser blocked the sign-in window — allow popups for this site and try again.", true);
+            return;
+          }
+          pop.document.write('<p style="font:15px -apple-system;padding:30px;color:#55606E">Opening ' +
+            HL.esc(it.name) + "'s sign-in…</p>");
+
+          var done = false;
+          function onMessage(ev) {
+            // GHL's callback page posts back from its own origin. Accept only
+            // leadconnector/gohighlevel origins — anything else on the page
+            // must not be able to fake a connection.
+            if (!/(^https:\/\/)([a-z0-9-]+\.)*(leadconnectorhq|gohighlevel|msgsndr)\.com$/.test(ev.origin)) return;
+            var d = ev.data || {};
+            if (!d.accountId) return;
+            done = true;
+            window.removeEventListener("message", onMessage);
+            clearInterval(watch);
+            try { pop.close(); } catch (e) { /* already gone */ }
+            pickPage(it, d.accountId);
+          }
+          window.addEventListener("message", onMessage);
+
+          // If they close the window without finishing, say so rather than
+          // leaving a spinner running forever.
+          var watch = setInterval(function () {
+            if (pop.closed && !done) {
+              clearInterval(watch);
+              window.removeEventListener("message", onMessage);
+              HL.toast("Sign-in window closed before " + it.name + " was connected.", true);
+            }
+          }, 700);
+
+          HL.api("/api/connect/" + it.id + "/start")
+            .then(function (o) { pop.location.href = o.url; })
+            .catch(function (e) {
+              clearInterval(watch);
+              window.removeEventListener("message", onMessage);
+              try { pop.close(); } catch (e2) { /* fine */ }
+              HL.toast(e.message, true);
+            });
         }
-        var list = HL.el("div", "rowlist");
-        list.style.maxWidth = "720px";
-        list.style.margin = "0 auto";
-        ints.forEach(function (it) {
-          var row = HL.el("div", "lrow");
-          if (HL.BRAND_ICONS[it.id]) {
-            var ic = HL.el("div", "brand-ic" + (it.connected ? " on" : ""));
-            ic.innerHTML = HL.BRAND_ICONS[it.id];
-            row.appendChild(ic);
+
+        /* Step 3 — which page/channel does it post to? */
+        function pickPage(it, accountId) {
+          HL.toast("Signed in — reading your " + it.name + " pages…");
+          HL.api("/api/connect/" + it.id + "/accounts/" + encodeURIComponent(accountId))
+            .then(function (o) {
+              var pages = o.pages || [];
+              if (!pages.length) {
+                HL.toast("That " + it.name + " login has no page we can post to. For Instagram it must be a Business or Creator account linked to a Facebook Page.", true);
+                return;
+              }
+              if (pages.length === 1) return attach(it, accountId, pages[0]);
+
+              var body = HL.el("div");
+              body.appendChild(HL.el("p", "sec-intro", "Which one should your AI team post to?"));
+              var chosen = { page: pages[0] };
+              var list = HL.el("div", "pick-list");
+              pages.forEach(function (p, i) {
+                var row = HL.el("button", "pick-row" + (i === 0 ? " on" : ""));
+                row.type = "button";
+                if (p.avatar) {
+                  var av = document.createElement("img");
+                  av.src = p.avatar; av.className = "pick-av"; av.alt = "";
+                  row.appendChild(av);
+                }
+                var nm = HL.el("div", "pick-name", p.name);
+                if (p.alreadyConnected) nm.appendChild(HL.el("span", "pick-tag", "already connected"));
+                row.appendChild(nm);
+                row.addEventListener("click", function () {
+                  chosen.page = p;
+                  [].forEach.call(list.children, function (c) { c.classList.remove("on"); });
+                  row.classList.add("on");
+                });
+                list.appendChild(row);
+              });
+              body.appendChild(list);
+              HL.modal("Connect " + it.name, body, function () {
+                return attach(it, accountId, chosen.page);
+              }, "Connect");
+            })
+            .catch(function (e) { HL.toast(e.message, true); });
+        }
+
+        function attach(it, accountId, page) {
+          return HL.post("/api/connect/" + it.id + "/attach", { accountId: accountId, page: page })
+            .then(function (o) {
+              // o.connected is re-read from the engine, not assumed from the POST
+              HL.toast(o.connected
+                ? it.name + " connected — " + page.name + " is live."
+                : "Authorised, but " + it.name + " didn't attach. Try once more, or tell us and we'll look.", !o.connected);
+              HL.navigate();
+            })
+            .catch(function (e) { HL.toast(e.message, true); });
+        }
+
+        /* ---------- the app grid ---------- */
+        function card(it) {
+          var c = HL.el("div", "app-card" + (it.connected ? " on" : "") + (it.soon ? " soon" : ""));
+
+          var ic = HL.el("div", "app-ic");
+          if (HL.BRAND_ICONS[it.id]) ic.innerHTML = HL.BRAND_ICONS[it.id];
+          else { ic.classList.add("mono"); ic.textContent = it.name.charAt(0); }
+          c.appendChild(ic);
+
+          var nameRow = HL.el("div", "app-name", it.name);
+          if (it.connected) nameRow.appendChild(HL.el("span", "app-tick", "✓"));
+          c.appendChild(nameRow);
+          c.appendChild(HL.el("div", "app-desc", it.desc));
+
+          if (it.detail) c.appendChild(HL.el("div", "app-detail", it.detail));
+
+          var foot = HL.el("div", "app-foot");
+          if (it.connected && it.accounts && it.accounts.length) {
+            var dis = HL.el("button", "btn ghost sm", "Disconnect");
+            dis.addEventListener("click", function () {
+              if (!confirm("Disconnect " + it.accounts[0].name + " from " + it.name + "?\n\nScheduled posts to it will go back to preview mode.")) return;
+              dis.disabled = true;
+              HL.api("/api/connect/account/" + encodeURIComponent(it.accounts[0].id), { method: "DELETE" })
+                .then(function () { HL.toast(it.name + " disconnected"); HL.navigate(); })
+                .catch(function (e) { HL.toast(e.message, true); dis.disabled = false; });
+            });
+            foot.appendChild(dis);
+          } else if (it.connectable) {
+            var b = HL.el("button", "btn sm app-connect", "Connect");
+            b.addEventListener("click", function () { connect(it); });
+            foot.appendChild(b);
+          } else if (it.connected) {
+            foot.appendChild(HL.el("span", "pill-st connected", "on"));
+          } else if (it.soon) {
+            var s = HL.el("span", "pill-st grey", "soon");
+            s.title = it.how || "";
+            foot.appendChild(s);
           } else {
-            row.appendChild(HL.el("div", "mono" + (it.connected ? " on" : ""), it.name.charAt(0)));
-          }
-          var main = HL.el("div", "lmain");
-          main.appendChild(HL.el("div", "lname", it.name));
-          main.appendChild(HL.el("div", "lsub", it.desc));
-          // live status straight from the provider (why it's not connected, or
-          // what it can actually reach) — only present for checks we really run
-          if (it.detail) {
-            var d = HL.el("div", "lsub", it.detail);
-            d.style.cssText = "margin-top:3px;opacity:.75;font-size:12.5px";
-            main.appendChild(d);
-          }
-          row.appendChild(main);
-          var ctl = HL.el("div", "lctl");
-          // Honest controls only. A "Connect" button that opens a "coming
-          // soon" note is a fake button — so integrations that don't exist
-          // yet say "Coming soon" outright, and the ones the team wires up
-          // for you say exactly that.
-          var comingSoon = /coming soon/i.test(it.how || "");
-          if (it.connected) {
-            ctl.appendChild(HL.el("span", "pill-st connected", "connected"));
-          } else if (comingSoon) {
-            ctl.appendChild(HL.el("span", "pill-st grey", "coming soon"));
-          } else {
-            var b = HL.el("button", "btn ghost sm", "How to connect");
-            b.addEventListener("click", function () {
+            // Not connectable and not "soon" — something needs doing first,
+            // and the honest move is to say what, not show a dead button.
+            var w = HL.el("button", "btn ghost sm", "Why not?");
+            w.addEventListener("click", function () {
               var body = HL.el("div");
               var p = HL.el("p", null, it.how);
               p.style.cssText = "color:var(--muted);font-size:13.5px;line-height:1.6";
               body.appendChild(p);
-              HL.modal("Connect " + it.name, body);
+              HL.modal(it.name, body);
             });
-            ctl.appendChild(b);
+            foot.appendChild(w);
           }
-          row.appendChild(ctl);
-          list.appendChild(row);
-        });
-        root.appendChild(list);
+          c.appendChild(foot);
+          return c;
+        }
 
-        /* ---- your own connectors (webhooks) ---- */
-        var ch = HL.el("div");
-        ch.style.cssText = "max-width:720px;margin:26px auto 10px;display:flex;align-items:center;justify-content:space-between;gap:10px";
-        var chT = HL.el("div");
-        chT.innerHTML = "<b style='font-size:14.5px'>Your connectors</b><div style='font-size:12.5px;color:var(--muted);margin-top:2px'>Point HarperLinks at any webhook — Zapier, Make, n8n, your own site — and workflows can send events to it.</div>";
+        function section(title, hint, items) {
+          if (!items.length) return;
+          var h = HL.el("div", "app-sec");
+          h.appendChild(HL.el("h3", null, title));
+          if (hint) h.appendChild(HL.el("span", null, hint));
+          root.appendChild(h);
+          var grid = HL.el("div", "app-grid");
+          items.forEach(function (it) { grid.appendChild(card(it)); });
+          root.appendChild(grid);
+        }
+
+        section("Where your content goes", "One click each — you approve it on the platform's own screen",
+          ints.filter(function (i) { return i.group === "social"; }));
+        section("Running underneath", "Managed by HarperLinks",
+          ints.filter(function (i) { return i.group === "engine"; }));
+        section("Not yet", "Honest list — these have no working connection behind them",
+          ints.filter(function (i) { return i.group === "other"; }));
+
+        /* ---- raw webhook connectors (admin only — this is plumbing) ---- */
+        if (!isAdmin) return root;
+
+        var ch = HL.el("div", "app-sec");
+        var chT = HL.el("h3", null, "Your own webhooks");
         ch.appendChild(chT);
-        var addC = HL.el("button", "btn sm", "+ Add connector");
+        ch.appendChild(HL.el("span", null, "Zapier, Make, n8n, your own site"));
+        var addC = HL.el("button", "btn sm", "+ Add");
+        addC.style.marginLeft = "auto";
         addC.addEventListener("click", function () {
           var body = HL.el("div");
           var nm = HL.input("Name — e.g. Zapier leads hook");
@@ -1432,11 +1552,10 @@
         root.appendChild(ch);
 
         var clist = HL.el("div", "rowlist");
-        clist.style.cssText = "max-width:720px;margin:0 auto";
         if (!conns.length) {
           var ce = HL.el("div", "lsub");
-          ce.style.cssText = "max-width:720px;margin:4px auto 0;text-align:center;padding:16px;border:1.5px dashed var(--border);border-radius:14px";
-          ce.textContent = "No connectors yet — add one and it becomes a workflow step: \"Send the event to …\"";
+          ce.style.cssText = "text-align:center;padding:16px;border:1.5px dashed var(--border);border-radius:14px";
+          ce.textContent = "No webhooks yet — add one and it becomes a workflow step: \"Send the event to …\"";
           clist.appendChild(ce);
         }
         conns.forEach(function (c) {
@@ -1929,6 +2048,11 @@
 
   /* Real brand marks for the Integrations page — inline SVG, brand colours. */
   HL.BRAND_ICONS = {
+    pinterest: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#E60023\"/><path fill=\"#fff\" d=\"M12 2C6.477 2 2 6.477 2 12c0 4.237 2.636 7.855 6.356 9.312-.088-.791-.167-2.005.035-2.869.182-.78 1.176-4.971 1.176-4.971s-.3-.601-.3-1.489c0-1.395.809-2.436 1.816-2.436.856 0 1.27.643 1.27 1.414 0 .861-.549 2.149-.832 3.342-.236.999.501 1.814 1.486 1.814 1.783 0 3.154-1.88 3.154-4.594 0-2.402-1.726-4.082-4.19-4.082-2.855 0-4.53 2.141-4.53 4.354 0 .862.332 1.787.746 2.29a.3.3 0 0 1 .07.287c-.076.317-.246.999-.279 1.139-.044.183-.145.222-.335.134-1.25-.582-2.03-2.408-2.03-3.876 0-3.156 2.293-6.054 6.612-6.054 3.47 0 6.167 2.473 6.167 5.777 0 3.448-2.174 6.222-5.192 6.222-1.013 0-1.967-.527-2.293-1.149l-.624 2.379c-.226.868-.835 1.956-1.243 2.62A10 10 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2\"/></svg>",
+    threads: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#000\"/><path fill=\"#fff\" d=\"M17.1 11.4q-.14-.07-.29-.13c-.17-3.12-1.87-4.9-4.73-4.92h-.04c-1.71 0-3.13.73-4.01 2.06l1.57 1.08c.65-.99 1.68-1.2 2.44-1.2h.03c.94.01 1.65.28 2.11.81.33.38.56.91.67 1.58a12 12 0 0 0-2.65-.13c-2.67.15-4.39 1.71-4.27 3.87.06 1.1.61 2.04 1.54 2.65.79.52 1.8.77 2.86.71 1.4-.08 2.49-.61 3.26-1.59.58-.74.95-1.7 1.11-2.91.67.4 1.16.93 1.44 1.57.47 1.08.49 2.86-.96 4.31-1.27 1.27-2.8 1.82-5.11 1.84-2.56-.02-4.5-.84-5.76-2.44C5.14 16.96 4.53 14.87 4.5 12c.03-2.87.64-4.96 1.81-6.46C7.57 3.94 9.51 3.12 12.07 3.1c2.58.02 4.55.84 5.86 2.45.64.79 1.13 1.78 1.45 2.94l1.84-.49c-.39-1.42-1-2.65-1.84-3.67C17.71 2.27 15.24 1.19 12.08 1.17h-.01C8.91 1.19 6.47 2.28 4.82 4.41 3.35 6.3 2.59 8.93 2.56 12v.01c.03 3.06.79 5.69 2.26 7.58 1.65 2.13 4.09 3.22 7.25 3.24h.01c2.81-.02 4.79-.76 6.42-2.39 2.13-2.13 2.07-4.8 1.37-6.44-.5-1.18-1.46-2.13-2.77-2.6m-4.9 4.63c-1.17.07-2.39-.46-2.45-1.56-.04-.82.58-1.73 2.52-1.84q.33-.02.66-.02c.7 0 1.36.07 1.95.2-.22 2.76-1.52 3.16-2.68 3.22\"/></svg>",
+    google: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#fff\"/><path fill=\"#4285F4\" d=\"M21.6 12.23c0-.68-.06-1.33-.18-1.96H12v3.71h5.38a4.6 4.6 0 0 1-1.99 3.02v2.5h3.22c1.89-1.73 2.99-4.29 2.99-7.27\"/><path fill=\"#34A853\" d=\"M12 22c2.7 0 4.96-.9 6.61-2.43l-3.22-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H3.07v2.58A10 10 0 0 0 12 22\"/><path fill=\"#FBBC05\" d=\"M6.4 13.9a6 6 0 0 1 0-3.8V7.52H3.07a10 10 0 0 0 0 8.96z\"/><path fill=\"#EA4335\" d=\"M12 5.98c1.47 0 2.79.51 3.83 1.5l2.86-2.86C16.95 2.99 14.7 2 12 2a10 10 0 0 0-8.93 5.52L6.4 10.1c.79-2.36 3-4.12 5.6-4.12\"/></svg>",
+    email: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#0A6DD8\"/><path fill=\"#fff\" d=\"M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5v.37l-8 4.6-8-4.6zm0 2.68V16.5A1.5 1.5 0 0 0 5.5 18h13a1.5 1.5 0 0 0 1.5-1.5v-6.32l-7.5 4.31a1 1 0 0 1-1 0z\"/></svg>",
+    twitter: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#000\"/><path fill=\"#fff\" d=\"M13.9 10.6 20.4 3h-1.5l-5.6 6.6L8.8 3H3.6l6.8 9.9L3.6 21h1.5l5.9-6.9 4.7 6.9h5.2zM11.8 13l-.7-1-5.5-7.9h2.4l4.4 6.3.7 1 5.7 8.2h-2.4z\"/></svg>",
     anthropic: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#D97757\"/><path fill=\"#fff\" d=\"M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z\"/></svg>",
     instagram: "<svg viewBox=\"-5 -5 34 34\"><defs><radialGradient id=\"igbg\" cx=\"30%\" cy=\"107%\" r=\"150%\"><stop offset=\"0%\" stop-color=\"#FDF497\"/><stop offset=\"45%\" stop-color=\"#FD5949\"/><stop offset=\"60%\" stop-color=\"#D6249F\"/><stop offset=\"90%\" stop-color=\"#285AEB\"/></radialGradient></defs><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"url(#igbg)\"/><path fill=\"#fff\" d=\"M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077\"/></svg>",
     facebook: "<svg viewBox=\"-5 -5 34 34\"><rect x=\"-5\" y=\"-5\" width=\"34\" height=\"34\" rx=\"8.5\" fill=\"#0866FF\"/><path fill=\"#fff\" d=\"M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z\"/></svg>",

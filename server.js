@@ -6,6 +6,7 @@ const express = require("express");
 
 const engine = require("./src/engine");
 const memory = require("./src/memory");
+const notify = require("./src/notify");
 const auth = require("./src/auth");
 const tenant = require("./src/tenant");
 const siteAgent = require("./src/site-agent");
@@ -138,8 +139,7 @@ app.post("/api/auth/forgot", async (req, res) => {
       || `${req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}`;
     const link = `${base.replace(/\/$/, "")}/reset.html?token=${started.token}`;
 
-    const notify = require("./src/notify");
-    let out = { sent: false };
+      let out = { sent: false };
     if (notify.configured()) {
       out = await notify.sendTo(started.user.email, "Reset your HarperLinks password",
         `Someone asked to reset the password for your HarperLinks account.\n\nSet a new one here (the link lasts one hour):\n${link}\n\nIf this wasn't you, ignore this email — your password hasn't changed.`,
@@ -258,7 +258,6 @@ app.post("/api/public/signup", async (req, res) => {
   const plan = ["professional", "business", "enterprise", "not sure"].includes(b.plan) ? b.plan : "not sure";
   const message = String(b.message || "").trim().slice(0, 500);
 
-  const notify = require("./src/notify");
   await tenant.run(tenant.MAIN, async () => {
     const leads = store.getCol("leads");
     const record = {
@@ -355,7 +354,6 @@ app.post("/api/auth/password", (req, res) => {
 // The password is write-only: the GET never returns it, only whether one is set.
 
 app.get("/api/settings/email", adminOnly, (_req, res) => {
-  const notify = require("./src/notify");
   const c = notify.smtpConfig();
   res.json({ configured: notify.configured(), host: c.host, port: c.port, user: c.user, hasPass: !!c.pass });
 });
@@ -377,7 +375,6 @@ app.post("/api/settings/email", adminOnly, (req, res) => {
 
 // Prove it works: send a real test email to the team address, report honestly.
 app.post("/api/settings/email/test", adminOnly, async (_req, res) => {
-  const notify = require("./src/notify");
   const out = await notify.sendTo(notify.NOTIFY_EMAIL, "HarperLinks test email",
     "This is the test email from your HarperLinks dashboard. If you're reading it, email is working.",
     notify.wrapHtml({
@@ -1036,40 +1033,121 @@ app.delete("/api/team/:id", (req, res) => {
 // ---- integrations (honest status only) ------------------------------------------------------
 
 app.get("/api/integrations", async (_req, res) => {
-  // White-label rule: customers see the platforms they care about, never the
-  // plumbing. GoHighLevel does the actual publishing, but it has no row here —
-  // instead the Instagram/Facebook/TikTok/LinkedIn/YouTube rows show the REAL
-  // connection state of this account's (hidden) publishing engine. The admin
-  // manages that engine from Customer Accounts -> GoHighLevel.
+  // White-label rule: customers see the apps they care about, never the
+  // plumbing. GoHighLevel does the publishing and holds the platform
+  // approvals, but it has no row of its own — the Instagram/Facebook/TikTok
+  // rows show the REAL connection state of this account's hidden engine, and
+  // "Connect" runs the platform's own OAuth through it.
+  //
+  // Three honest states, and nothing in between:
+  //   connectable + connected      — authorised, and GHL lists the account
+  //   connectable + not connected  — one click away, nothing faked
+  //   soon                         — no working integration exists yet, so
+  //                                  there is no button to press
   const engineStatus = await ghl.health();
-  const linked = new Set(
-    (engineStatus.connected ? engineStatus.accounts || [] : []).map((a) => String(a.platform || "").toLowerCase())
-  );
-  const social = (ourName, ...ghlNames) => {
-    const on = ghlNames.some((n) => linked.has(n));
+  const linked = (engineStatus.connected ? engineStatus.accounts || [] : []);
+  const byPlatform = {};
+  linked.forEach((a) => {
+    const k = String(a.platform || "").toLowerCase();
+    (byPlatform[k] = byPlatform[k] || []).push({ id: a.id, name: a.name });
+  });
+
+  const platforms = ghl.oauthPlatforms();
+  const social = (id, desc, ...ghlNames) => {
+    const accounts = ghlNames.flatMap((n) => byPlatform[n] || []);
     return {
-      connected: on,
-      detail: on ? "Connected — publishing is live." : undefined,
-      how: "The HarperLinks team connects this for you during your setup — reach out on WhatsApp or email and we'll link it to your account.",
+      id,
+      name: platforms[id] ? platforms[id].label : id,
+      desc,
+      group: "social",
+      connectable: engineStatus.connected, // the engine has to be up to start OAuth
+      connected: accounts.length > 0,
+      accounts,
+      detail: accounts.length
+        ? `Posting to ${accounts.map((a) => a.name).join(", ")}`
+        : platforms[id] && platforms[id].note,
+      how: engineStatus.connected
+        ? "Click Connect, sign in, tap Authorise. No passwords are shared with HarperLinks and no API keys are needed."
+        : "Your publishing engine isn't set up yet — the HarperLinks team switches it on during setup.",
     };
   };
 
+  const soon = (id, name, desc, note, group) => ({
+    id, name, desc, group: group || "other", connectable: false, connected: false, soon: true, how: note,
+  });
+
   res.json([
-    { id: "anthropic", name: "Claude (Anthropic)", desc: "Powers live AI writing and chat.", connected: HAS_KEY, how: "Connected and managed by the HarperLinks team." },
-    Object.assign({ id: "instagram", name: "Instagram", desc: "Publish posts to your feed." }, social("instagram", "instagram")),
-    Object.assign({ id: "facebook", name: "Facebook", desc: "Page posts & Messenger." }, social("facebook", "facebook")),
-    Object.assign({ id: "tiktok", name: "TikTok", desc: "Video publishing." }, social("tiktok", "tiktok", "tiktok-business")),
-    Object.assign({ id: "linkedin", name: "LinkedIn", desc: "Company page publishing." }, social("linkedin", "linkedin")),
-    Object.assign({ id: "youtube", name: "YouTube", desc: "Video publishing." }, social("youtube", "youtube")),
-    { id: "gcal", name: "Google Calendar", desc: "Two-way appointment sync.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
-    { id: "gmail", name: "Gmail", desc: "Email sending & sequences.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
-    { id: "stripe", name: "Stripe", desc: "Subscriptions & billing.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
-    { id: "twilio", name: "Twilio", desc: "AI phone calls & SMS.", connected: false, how: "Coming soon — powers Harper, your AI receptionist." },
-    { id: "videoai", name: "Video AI", desc: "Turns the bot's video scripts into rendered footage.", connected: false, how: "Coming soon — scripts & shot lists already work today." },
-    { id: "whatsapp", name: "WhatsApp Business", desc: "Customer messaging.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
-    { id: "shopify", name: "Shopify", desc: "Store data & customers.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
-    { id: "wordpress", name: "WordPress", desc: "Push website edits live.", connected: false, how: "Coming soon — the HarperLinks team will set this up for you when it lands." },
+    social("instagram", "Posts, reels and carousels to your feed.", "instagram"),
+    social("facebook", "Page posts and updates.", "facebook"),
+    social("tiktok", "Short-form video.", "tiktok", "tiktok-business"),
+    social("linkedin", "Profile and company page posts.", "linkedin"),
+    social("youtube", "Video uploads to your channel.", "youtube"),
+    social("pinterest", "Pins to your boards.", "pinterest"),
+    social("threads", "Posts to Threads.", "threads"),
+    social("google", "Google Business Profile posts.", "google"),
+    {
+      id: "anthropic", name: "Claude (Anthropic)", desc: "Powers your AI team's writing and thinking.",
+      group: "engine", connectable: false, connected: HAS_KEY,
+      detail: HAS_KEY ? "Live — your AI team is thinking with it right now." : undefined,
+      how: "Connected and paid for by HarperLinks — nothing for you to set up.",
+    },
+    {
+      id: "email", name: "Email", desc: "Password resets, welcomes and your daily handover.",
+      group: "engine", connectable: false, connected: notify.configured(),
+      detail: notify.configured() ? "Sending" : undefined,
+      how: "Set up in Settings → Email.",
+    },
+    soon("twitter", "X (Twitter)", "Posts to X.", "Not available at all — our publishing engine dropped X support in December 2024. We won't pretend otherwise."),
+    soon("gcal", "Google Calendar", "Two-way appointment sync.", "Coming soon — appointments work inside HarperLinks today."),
+    soon("stripe", "Stripe", "Subscriptions & billing.", "Coming soon."),
+    soon("twilio", "Twilio", "AI phone calls & SMS.", "Coming soon — powers Harper, your AI receptionist."),
+    soon("videoai", "Video AI", "Turns video scripts into filmed footage.", "Coming soon — scripts, shot lists and slideshow videos already work today."),
+    soon("whatsapp", "WhatsApp Business", "Customer messaging.", "Coming soon."),
+    soon("shopify", "Shopify", "Store data & customers.", "Coming soon."),
+    soon("wordpress", "WordPress", "Push website edits live.", "Coming soon."),
   ]);
+});
+
+// ---- one-click social connect ----------------------------------------------
+// Three calls mirroring the three real OAuth steps. Nothing here reports a
+// connection it hasn't re-read back from the publishing engine.
+
+app.get("/api/connect/:platform/start", async (req, res) => {
+  try {
+    const out = await ghl.oauthStart(req.params.platform, req.user.id);
+    res.json({ ok: true, url: out.url });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// After the popup comes back with an accountId: what can that login post to?
+app.get("/api/connect/:platform/accounts/:accountId", async (req, res) => {
+  try {
+    const pages = await ghl.oauthAccounts(req.params.platform, req.params.accountId);
+    res.json({ ok: true, pages });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/connect/:platform/attach", async (req, res) => {
+  const { accountId, page } = req.body || {};
+  if (!accountId || !page || !page.id) return res.status(400).json({ error: "Pick which page to post to." });
+  try {
+    const out = await ghl.oauthAttach(req.params.platform, accountId, page);
+    res.json(out);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.delete("/api/connect/account/:id", async (req, res) => {
+  try {
+    res.json({ ok: true, accounts: await ghl.removeAccount(req.params.id) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ---- insights & competitors --------------------------------------------------

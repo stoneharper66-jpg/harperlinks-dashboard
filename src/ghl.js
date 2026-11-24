@@ -167,6 +167,126 @@ async function publishPost(post, { scheduleAt } = {}) {
   }
 }
 
+// ---- one-click social connect ----------------------------------------------
+//
+// The customer clicks Connect, logs in to Instagram (or wherever) in a popup,
+// taps Authorise, picks which page, and they're live. No API keys, no tokens,
+// no developer account — because the OAuth app on the other end is GHL's,
+// and GHL already holds the publishing approvals from Meta/TikTok/LinkedIn
+// that would otherwise take us weeks of app review to get.
+//
+// GHL's flow is three steps:
+//   1. /oauth/:platform/start  → 302 to the platform's own consent screen.
+//      The redirect needs an Authorization header, which a browser popup
+//      can't send — so we make that call here, server-side, and hand the
+//      browser only the final consent URL.
+//   2. /oauth/:locationId/:platform/accounts/:accountId → the pages/channels
+//      that login can post to.
+//   3. POST the same path → attach the chosen one to this account.
+//
+// Platforms GHL can genuinely connect. X/Twitter is deliberately absent:
+// GHL dropped support on 2024-12-04 and the endpoint returns a 500 saying so.
+const OAUTH_PLATFORMS = {
+  instagram: { label: "Instagram", note: "Business or Creator account linked to a Facebook Page" },
+  facebook: { label: "Facebook", note: "Posts to a Page you manage" },
+  tiktok: { label: "TikTok", note: "Personal account" },
+  "tiktok-business": { label: "TikTok Business", note: "Business account" },
+  linkedin: { label: "LinkedIn", note: "Profile or Company Page" },
+  youtube: { label: "YouTube", note: "Channel — for video posts" },
+  pinterest: { label: "Pinterest", note: "Boards on a business account" },
+  threads: { label: "Threads", note: "Linked to your Instagram login" },
+  google: { label: "Google Business", note: "Your Google Business Profile" },
+};
+
+function oauthPlatforms() {
+  return OAUTH_PLATFORMS;
+}
+
+/**
+ * Step 1. Returns the platform's real consent URL for the browser to open.
+ * We follow nothing — we read the Location header and hand it over.
+ */
+async function oauthStart(platform, userId) {
+  if (!OAUTH_PLATFORMS[platform]) throw new Error(`${platform} can't be connected this way.`);
+  if (!isConfigured()) throw new Error("The publishing engine isn't set up for this account yet.");
+  const { token, locationId } = config();
+  const url = `${API}/social-media-posting/oauth/${platform}/start` +
+    `?locationId=${encodeURIComponent(locationId)}&userId=${encodeURIComponent(userId || locationId)}`;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, {
+      redirect: "manual",
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${token}`, Version: "v3", Accept: "application/json" },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  const location = res.headers.get("location");
+  if (!location) {
+    const body = await res.text();
+    let msg = `HTTP ${res.status}`;
+    try { msg = JSON.parse(body).message || msg; } catch { /* keep the status */ }
+    throw new Error(msg);
+  }
+  return { url: location, platform };
+}
+
+/** Step 2. Which pages / channels that login can actually post to. */
+async function oauthAccounts(platform, accountId) {
+  const { locationId } = config();
+  const out = await call(`/social-media-posting/oauth/${locationId}/${platform}/accounts/${encodeURIComponent(accountId)}`);
+  const r = (out && out.results) || {};
+  if (r.error && r.error.code) throw new Error(`${platform} refused the connection (${r.error.code}).`);
+  // GHL names this list differently per platform; take whichever came back.
+  const raw = r.pages || r.accounts || r.channels || r.boards || r.locations || [];
+  return raw.map((p) => ({
+    id: p.id,
+    name: p.name,
+    avatar: p.avatar || null,
+    alreadyConnected: !!p.isConnected,
+    type: p.type || null,
+  }));
+}
+
+/** Step 3. Attach the chosen page — after this it's genuinely live. */
+async function oauthAttach(platform, accountId, page) {
+  const { locationId } = config();
+  const body = {
+    type: page.type || (platform === "facebook" || platform === "instagram" ? "page" : "profile"),
+    originId: page.id,
+    name: page.name,
+  };
+  if (page.avatar) body.avatar = page.avatar;
+  await call(`/social-media-posting/oauth/${locationId}/${platform}/accounts/${encodeURIComponent(accountId)}`, {
+    method: "POST",
+    body,
+  });
+  // Re-read from GHL so what we report is what GHL actually holds, not what
+  // we hoped the POST did.
+  const accounts = await listAccounts();
+  // Only call it connected if GHL now lists an account for that platform.
+  // Trusting the POST's own 200 would let a silently-dropped attach show a
+  // green light on a dead connection.
+  const live = matchAccounts(accounts, platform).length > 0;
+  store.logActivity("integration", live
+    ? `${OAUTH_PLATFORMS[platform].label} connected — ${page.name}`
+    : `${OAUTH_PLATFORMS[platform].label} authorised but didn't attach — ${page.name}`);
+  return { ok: true, connected: live, accounts };
+}
+
+/** Disconnect a connected account. */
+async function removeAccount(id) {
+  const { locationId } = config();
+  await call(`/social-media-posting/${locationId}/accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const accounts = await listAccounts();
+  store.logActivity("integration", "A social account was disconnected");
+  return accounts;
+}
+
 /** Connection check for the Integrations page. */
 async function health() {
   if (!isConfigured()) return { connected: false, reason: "No token or location id set." };
@@ -184,4 +304,7 @@ function connectInfo() {
   return { locationId };
 }
 
-module.exports = { isConfigured, saveConfig, listAccounts, linkedPlatforms, publishPost, health, connectInfo };
+module.exports = {
+  isConfigured, saveConfig, listAccounts, linkedPlatforms, publishPost, health, connectInfo,
+  oauthPlatforms, oauthStart, oauthAccounts, oauthAttach, removeAccount,
+};
