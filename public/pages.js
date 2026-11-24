@@ -1633,10 +1633,18 @@
             btns.style.cssText = "display:flex;gap:8px;margin-top:4px";
             var save = HL.el("button", "btn sm", "Save");
             save.addEventListener("click", function () {
-              save.disabled = true;
+              save.disabled = true; save.textContent = "Checking…";
+              // The server logs in to the mail server before saying yes, so a
+              // wrong App Password is caught here instead of by a customer
+              // who never got their welcome email.
               HL.post("/api/settings/email", { host: host.value, user: user.value, pass: pass.value })
-                .then(function () { HL.toast("Email settings saved"); save.disabled = false; })
-                .catch(function (e2) { HL.toast(e2.message, true); save.disabled = false; });
+                .then(function (o) {
+                  if (o.verified) HL.toast("Saved and tested — email is sending");
+                  else HL.toast("Saved, but the login was refused: " + (o.reason || "unknown"), true);
+                  save.disabled = false; save.textContent = "Save";
+                  HL.navigate();
+                })
+                .catch(function (e2) { HL.toast(e2.message, true); save.disabled = false; save.textContent = "Save"; });
             });
             btns.appendChild(save);
             var test = HL.el("button", "btn ghost sm", "Send me a test email");
@@ -1649,6 +1657,24 @@
             });
             btns.appendChild(test);
             eb.appendChild(btns);
+
+            /* What actually happened on the last few sends. Email used to
+               fail silently — a reset that never arrived looked identical to
+               one that did. */
+            if (cfg.recent && cfg.recent.length) {
+              var h = HL.el("div", "mail-log");
+              h.appendChild(HL.el("div", "mail-log-t", "Recent emails"));
+              cfg.recent.forEach(function (r) {
+                var row = HL.el("div", "mail-row" + (r.ok ? "" : " bad"));
+                row.appendChild(HL.el("span", "mail-dot", r.ok ? "✓" : "!"));
+                var m = HL.el("div");
+                m.appendChild(HL.el("div", "mail-sub", r.subject + " → " + r.to));
+                m.appendChild(HL.el("div", "mail-when", HL.fmtWhen(r.at) + (r.ok ? "" : " · " + r.reason)));
+                row.appendChild(m);
+                h.appendChild(row);
+              });
+              eb.appendChild(h);
+            }
           });
           ep.appendChild(eb);
           ep.style.marginBottom = "16px";

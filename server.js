@@ -355,10 +355,16 @@ app.post("/api/auth/password", (req, res) => {
 
 app.get("/api/settings/email", adminOnly, (_req, res) => {
   const c = notify.smtpConfig();
-  res.json({ configured: notify.configured(), host: c.host, port: c.port, user: c.user, hasPass: !!c.pass });
+  res.json({
+    configured: notify.configured(),
+    host: c.host, port: c.port, user: c.user, hasPass: !!c.pass,
+    // What really happened on the last few sends. A send that failed used to
+    // fail silently; now it's on screen.
+    recent: notify.recentSends().slice(0, 6),
+  });
 });
 
-app.post("/api/settings/email", adminOnly, (req, res) => {
+app.post("/api/settings/email", adminOnly, async (req, res) => {
   const { host, port, user, pass } = req.body || {};
   const saved = store.getGlobal("smtp", {});
   const next = {
@@ -370,7 +376,14 @@ app.post("/api/settings/email", adminOnly, (req, res) => {
   if (!next.host || !next.user) return res.status(400).json({ error: "Host and email are both needed." });
   store.saveGlobal("smtp", next);
   tenant.run(tenant.MAIN, () => store.logActivity("system", "Email (SMTP) settings updated"));
-  res.json({ ok: true, configured: !!(next.host && next.user && next.pass) });
+
+  // Actually log in to the mail server before calling it saved. Catching a
+  // wrong App Password here beats discovering it when a paying customer
+  // never receives their welcome email.
+  const check = await notify.verify();
+  tenant.run(tenant.MAIN, () => store.logActivity("system",
+    check.ok ? "Email credentials verified — sending is live" : `Email credentials REJECTED — ${check.reason}`));
+  res.json({ ok: true, configured: !!(next.host && next.user && next.pass), verified: check.ok, reason: check.reason });
 });
 
 // Prove it works: send a real test email to the team address, report honestly.

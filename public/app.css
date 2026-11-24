@@ -1692,3 +1692,16 @@ body{overflow-x:hidden}
   .hl-fab.working .px-arm, .hl-fab.working .px-u,
   [data-emp].at-work svg, [data-emp].at-work::after { animation: none !important; }
 }
+
+/* ---- what the email system actually did --------------------------------- */
+.mail-log { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.mail-log-t { font-size: 12px; font-weight: 650; color: var(--muted); margin-bottom: 8px; }
+.mail-row { display: flex; gap: 9px; align-items: flex-start; padding: 5px 0; }
+.mail-dot {
+  flex: 0 0 auto; width: 16px; height: 16px; border-radius: 99px; margin-top: 2px;
+  background: var(--ok); color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 700;
+}
+.mail-row.bad .mail-dot { background: var(--bad); }
+.mail-sub { font-size: 13px; }
+.mail-when { font-size: 11.5px; color: var(--muted); }
+.mail-row.bad .mail-when { color: var(--bad); }

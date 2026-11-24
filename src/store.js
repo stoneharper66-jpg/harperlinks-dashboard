@@ -26,7 +26,16 @@ const ACCOUNTS_DIR = path.join(ROOT_DIR, "accounts");
   } catch {
     return; // no data dir yet — fresh install
   }
-  const GLOBAL = new Set(["users.json"]);
+  // Every file that lives at the data/ root on purpose. This list MUST name
+  // all of them: anything missing gets swept into the founding account's
+  // folder on the next boot and then reads back empty.
+  //
+  // That was a real, silent bug. Settings → Email writes smtp.json here, so
+  // every restart moved it away and email quietly switched itself off —
+  // password resets and customer welcome emails stopped sending with nothing
+  // in the UI to explain why. password-resets.json had the same problem,
+  // which would invalidate every outstanding reset link on a restart.
+  const GLOBAL = new Set(["users.json", "smtp.json", "password-resets.json", "email-log.json"]);
   const legacy = entries.filter((f) => !GLOBAL.has(f));
   if (!legacy.length) return;
   const mainDir = path.join(ACCOUNTS_DIR, tenant.MAIN);

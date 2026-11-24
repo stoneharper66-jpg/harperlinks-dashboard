@@ -69,9 +69,52 @@ function wrapHtml({ title, bodyHtml, buttonText, buttonUrl }) {
   </table></body></html>`;
 }
 
+/**
+ * Check the credentials actually work — connect and authenticate, send
+ * nothing. Used by the Settings page so a wrong App Password is caught the
+ * moment it's saved, rather than discovered weeks later by a customer who
+ * never got their welcome email.
+ */
+async function verify() {
+  if (!configured()) return { ok: false, reason: "No email settings saved yet." };
+  try {
+    await transport().verify();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: friendly(e) };
+  }
+}
+
+// SMTP errors are written for sysadmins. Stone is not a sysadmin.
+function friendly(e) {
+  const m = String((e && e.message) || e);
+  if (/Invalid login|535|BadCredentials/i.test(m)) {
+    return "Gmail rejected the login. The password has to be a 16-letter App Password (not your normal Gmail password), and 2-Step Verification must be on.";
+  }
+  if (/ENOTFOUND|EAI_AGAIN/i.test(m)) return "Couldn't find that mail server — check the address.";
+  if (/ETIMEDOUT|ECONNREFUSED|ESOCKET/i.test(m)) return "Couldn't reach the mail server. Check the port (465 for Gmail).";
+  if (/self signed|certificate/i.test(m)) return "The mail server's security certificate didn't check out.";
+  return m;
+}
+
+// The last few sends, so a silent failure can't stay silent. Kept globally
+// (email is a system-wide setting, not a per-customer one).
+function logSend(entry) {
+  try {
+    const log = store.getGlobal("email-log", []);
+    log.unshift(Object.assign({ at: new Date().toISOString() }, entry));
+    store.saveGlobal("email-log", log.slice(0, 40));
+  } catch { /* logging must never break a send */ }
+}
+function recentSends() {
+  return store.getGlobal("email-log", []);
+}
+
 async function sendTo(to, subject, text, html) {
   if (!configured()) {
-    return { sent: false, reason: "email isn't set up yet (Settings → Email, or SMTP_* in .env)" };
+    const reason = "email isn't set up yet (Settings → Email, or SMTP_* in .env)";
+    logSend({ to, subject, ok: false, reason });
+    return { sent: false, reason };
   }
   try {
     const c = smtpConfig();
@@ -82,9 +125,12 @@ async function sendTo(to, subject, text, html) {
       text,                      // the plain version — always included
       html: html || undefined,   // the pretty version — when provided
     });
+    logSend({ to, subject, ok: true });
     return { sent: true, to };
   } catch (e) {
-    return { sent: false, reason: e.message };
+    const reason = friendly(e);
+    logSend({ to, subject, ok: false, reason });
+    return { sent: false, reason };
   }
 }
 
@@ -92,4 +138,4 @@ function sendToTeam(subject, text) {
   return sendTo(NOTIFY_EMAIL, subject, text);
 }
 
-module.exports = { sendTo, sendToTeam, configured, smtpConfig, wrapHtml, NOTIFY_EMAIL };
+module.exports = { sendTo, sendToTeam, configured, smtpConfig, wrapHtml, verify, recentSends, NOTIFY_EMAIL };

@@ -160,7 +160,26 @@ First thing to do: paste your website address into the Command Centre. Your team
 Any trouble at all, just reply to this email.
 
 — Stone and Terry
-   HarperLinks`
+   HarperLinks`,
+    // The first thing a paying customer ever sees from us, so it gets the
+    // branded shell and a button straight into the dashboard.
+    notify.wrapHtml({
+      title: `Your AI team is ready${business ? `, ${business}` : ""} 🎉`,
+      bodyHtml:
+        `<p style="margin:0 0 14px">Hi${name ? ` ${name.split(" ")[0]}` : ""}, your <b>${plan}</b> plan is live` +
+        `${trialing ? " and your 7-day free trial has started" : ""}. Your AI team is set up and waiting.</p>` +
+        `<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;background:#F6F8FC;border-radius:12px;padding:14px 16px;margin:0 0 14px">` +
+        `<tr><td style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13.5px;color:#55606E;line-height:1.9">` +
+        `<b style="color:#0E1116">Email</b><br>${email}<br>` +
+        `<b style="color:#0E1116">Temporary password</b><br><code style="font-size:14px;color:#0E1116">${password}</code>` +
+        `</td></tr></table>` +
+        `<p style="margin:0 0 14px">Please change that password once you're in — <b>Settings → Password</b>.</p>` +
+        `<p style="margin:0"><b style="color:#0E1116">First thing to do:</b> paste your website address into the Command Centre. ` +
+        `Your team reads it and learns your business — what you sell, how you talk, who you serve — then they can start ` +
+        `writing your posts and handling your leads.</p>`,
+      buttonText: "Sign in to HarperLinks",
+      buttonUrl: signIn,
+    })
   );
 
   const mail = await notify.sendToTeam(
