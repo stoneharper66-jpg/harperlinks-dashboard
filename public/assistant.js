@@ -458,6 +458,189 @@
     });
     window.addEventListener("resize", function () { if (!flight) place(fab.offsetLeft, fab.offsetTop); });
 
+    /* ================= the working buddy =================
+       Everything below is driven by REAL events. He only walks because a
+       tool genuinely started; he only downs tools because the server said
+       the step finished. There is no timer anywhere in here pretending to
+       be work — if he's moving, something is actually happening. */
+
+    // Which part of the app each tool belongs to. When a tool starts, he
+    // walks to that part of the screen, so you can see where the work is
+    // landing before the page even changes.
+    var TOOL_HOME = {
+      create_post: "social", schedule_post: "social", list_scheduled_posts: "social",
+      update_post: "social", generate_image: "social", generate_video: "social",
+      get_insights: "analytics", research_competitor: "analytics",
+      create_lead: "crm",
+      book_appointment: "appointments",
+      get_website: "website", build_website: "website", edit_website: "website",
+      publish_website: "website", get_website_html: "website",
+      ingest_website: "settings", get_knowledge: "settings",
+      remember: "settings", recall: "settings", forget: "settings",
+      add_task: "overview", list_tasks: "overview", complete_task: "overview",
+      manage_employee: "employees", get_usage: "settings",
+      list_automations: "automations", create_automation: "automations",
+      test_automation: "automations", list_automation_options: "automations",
+    };
+
+    // Where on screen that part of the app lives right now. The sidebar link
+    // is the honest answer — it's the thing you'd click to go there.
+    function homeTarget(page) {
+      var link = document.querySelector('.side-link[data-page="' + page + '"]');
+      if (!link) return null;
+      var r = link.getBoundingClientRect();
+      if (!r.width) return null;
+      return { x: r.right + 14, y: r.top + r.height / 2 - fab.offsetHeight / 2 };
+    }
+
+    var walk = null;      // the in-progress walk, if any
+    var restPos = null;   // where he was before he went to work
+
+    function stopWalk() {
+      if (!walk) return;
+      cancelAnimationFrame(walk.raf);
+      walk = null;
+      fab.classList.remove("walking", "face-left");
+    }
+
+    /**
+     * Walk him there. Not a teleport and not a CSS transition — a per-frame
+     * step with a little bob, so it reads as "he went over to do the job".
+     * A drag or a throw cancels it; the human always wins.
+     */
+    function walkTo(target, done) {
+      if (!target || calmMotion) { if (done) done(); return; }
+      stopWalk();
+      stopFlight();
+      var from = clamp(fab.offsetLeft, fab.offsetTop);
+      var to = clamp(target.x, target.y);
+      var dx = to.x - from.x, dy = to.y - from.y;
+      var dist = Math.hypot(dx, dy);
+      if (dist < 24) { if (done) done(); return; }
+      var dur = Math.min(900, Math.max(260, dist * 1.15));
+      var t0 = performance.now();
+      fab.classList.add("walking");
+      fab.classList.toggle("face-left", dx < 0);
+
+      function frame(now) {
+        if (drag || flight) { stopWalk(); return; }   // he's been grabbed
+        var p = Math.min(1, (now - t0) / dur);
+        var e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
+        var x = from.x + dx * e;
+        var y = from.y + dy * e - Math.sin(p * Math.PI) * 18; // a little arc
+        fab.style.left = x + "px";
+        fab.style.top = y + "px";
+        if (p < 1) { walk.raf = requestAnimationFrame(frame); return; }
+        stopWalk();
+        if (done) done();
+      }
+      walk = { raf: requestAnimationFrame(frame) };
+    }
+
+    // A small word balloon that says what he's actually doing right now.
+    var statusBubble = null, statusHide = null;
+    function status(text) {
+      if (!text) {
+        if (statusBubble) { statusBubble.classList.remove("on"); }
+        return;
+      }
+      if (!statusBubble) {
+        statusBubble = HL.el("div", "px-status");
+        document.body.appendChild(statusBubble);
+      }
+      statusBubble.textContent = text;
+      var r = fab.getBoundingClientRect();
+      // flip to whichever side has room, so it never runs off screen
+      var left = r.left + r.width / 2;
+      statusBubble.classList.toggle("flip", left > window.innerWidth - 190);
+      statusBubble.style.left = left + "px";
+      statusBubble.style.top = (r.top - 10) + "px";
+      statusBubble.classList.add("on");
+      clearTimeout(statusHide);
+      statusHide = setTimeout(function () { statusBubble.classList.remove("on"); }, 4200);
+    }
+    // keep the balloon stuck to him while he walks
+    function followStatus() {
+      if (!statusBubble || !statusBubble.classList.contains("on")) return;
+      var r = fab.getBoundingClientRect();
+      statusBubble.style.left = (r.left + r.width / 2) + "px";
+      statusBubble.style.top = (r.top - 10) + "px";
+      statusBubble.classList.toggle("flip", r.left + r.width / 2 > window.innerWidth - 190);
+    }
+    setInterval(followStatus, 120);
+
+    /* ---- the public control surface ----
+       social.js (every chat panel) and this file both drive him through
+       this, so wherever the work is started from, he reacts the same. */
+    var busyDepth = 0;
+    var navPending = false;   // a page-open is mid-walk; don't interrupt it
+    HL.buddy = {
+      // "He's thinking" — the gap before a tool call, which is most of the wait.
+      think: function (label) {
+        busyDepth++;
+        fab.classList.remove("idle-wave", "idle-hop", "idle-look");
+        fab.classList.add("busy", "thinking");
+        status(label || "Thinking…");
+      },
+      // A real tool started. Walk to where that work lives and roll sleeves up.
+      tool: function (toolName, label) {
+        fab.classList.remove("thinking");
+        fab.classList.add("busy", "working");
+        status(label || "Working…");
+        var page = TOOL_HOME[toolName];
+        if (!page) return;
+        var t = homeTarget(page);
+        if (!t) return;
+        if (!restPos) restPos = clamp(fab.offsetLeft, fab.offsetTop);
+        walkTo(t);
+      },
+      // A step finished — a quick nod, nothing more.
+      step: function (ok) {
+        fab.classList.remove("nod", "oops");
+        void fab.offsetWidth;
+        fab.classList.add(ok ? "nod" : "oops");
+        setTimeout(function () { fab.classList.remove("nod", "oops"); }, 520);
+      },
+      // The turn is over. Down tools, walk home, and stay out of the way.
+      done: function (msg) {
+        busyDepth = Math.max(0, busyDepth - 1);
+        if (busyDepth) return;                       // another job still running
+        fab.classList.remove("thinking", "working");
+        // If he's on his way to open a page, leave him to it. This used to
+        // cut the walk short, which killed the callback that did the actual
+        // navigating — the AI said it opened a page and nothing happened.
+        if (navPending) return;
+        status(msg || null);
+        var home = restPos;
+        restPos = null;
+        if (home) {
+          walkTo(home, function () { fab.classList.remove("busy"); savePos(); });
+        } else {
+          fab.classList.remove("busy");
+        }
+      },
+      // Open a page — this is how the AI genuinely drives the app.
+      goToPage: function (page, why) {
+        var t = homeTarget(page);
+        var home = restPos || clamp(fab.offsetLeft, fab.offsetTop);
+        restPos = null;
+        status(why || "Opening " + page + "…");
+
+        navPending = true;
+        function go() {
+          if (!navPending) return;        // already handled
+          navPending = false;
+          location.hash = "#/" + page;
+          walkTo(home, function () { fab.classList.remove("busy"); savePos(); });
+        }
+        if (t) walkTo(t, go); else go();
+        // The walk can be cancelled — a drag, a resize, another turn starting.
+        // The page still has to open, because the owner asked for it.
+        setTimeout(go, 1400);
+      },
+      say: function (text) { status(text); },
+    };
+
     /* ---------- open / close ---------- */
     var greeted = false;
     function toggle() {
@@ -579,9 +762,16 @@
         if (out.reply) add("bot", out.reply);
         busy = false;
         input.focus();
+        HL.buddy.done();
         if (job) HL.jobDone(job, (out.steps || []).length
           ? "Done — " + text.slice(0, 40) : "Answered", true);
-        // refresh only if the user is still where the work landed —
+
+        // The AI asked to open a page. He walks there and the page changes —
+        // this is the one place the assistant genuinely drives the app.
+        var nav = (out.actions || []).filter(function (a) { return a.type === "navigate"; })[0];
+        if (nav) { HL.buddy.goToPage(nav.page, nav.why); return; }
+
+        // otherwise refresh only if the user is still where the work landed —
         // never yank them off a different page
         var nowPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0];
         if ((out.actions || []).length && nowPage === startPage) HL.navigate();
@@ -592,16 +782,19 @@
         add("bot", "Sorry — " + msg);
         busy = false;
         input.focus();
+        HL.buddy.done();
         if (job) HL.jobDone(job, "Couldn't finish: " + text.slice(0, 36), false);
       }
 
+      HL.buddy.think();
       HL.stream("/api/chat/stream", payload, function (ev) {
-        if (ev.phase === "model") { think.say("Thinking…"); if (job) HL.jobStep(job, "Thinking…"); }
+        if (ev.phase === "model") { think.say("Thinking…"); if (job) HL.jobStep(job, "Thinking…"); HL.buddy.think(); }
         else if (ev.phase === "tool-start") {
           think.say("Working…"); think.start(ev.tool);
           if (job) HL.jobStep(job, ((HL.STEP_LABELS && HL.STEP_LABELS[ev.tool]) || ev.tool.replace(/_/g, " ")) + "…");
+          HL.buddy.tool(ev.tool, HL.STEP_LABELS && HL.STEP_LABELS[ev.tool]);
         }
-        else if (ev.phase === "step") think.finish(ev.tool, ev.ok);
+        else if (ev.phase === "step") { think.finish(ev.tool, ev.ok); HL.buddy.step(ev.ok); }
         else if (ev.phase === "done") land(ev);
         else if (ev.phase === "error") fail(ev.error);
       }).then(function () {

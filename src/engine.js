@@ -34,7 +34,7 @@ function mode() {
 // tags on one bot. Now Sage can't edit the website and Indi can't book
 // appointments — each one's powers match their charter. Darcy (and plain
 // unattributed chat, e.g. the floating assistant) keeps the full set.
-const SHARED = ["get_business_profile", "get_knowledge", "add_task", "list_tasks", "complete_task", "get_usage"];
+const SHARED = ["get_business_profile", "get_knowledge", "add_task", "list_tasks", "complete_task", "get_usage", "open_page", "remember", "recall", "forget"];
 const EMPLOYEE_TOOLS = {
   social: ["ingest_website", "create_post", "schedule_post", "list_scheduled_posts", "update_post", "generate_image", "generate_video", "get_insights"],
   support: ["create_lead"],

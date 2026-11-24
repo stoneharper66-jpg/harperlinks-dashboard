@@ -32,6 +32,10 @@
     research_competitor: "Studying the competitor's website",
     list_tasks: "Checking your tasks",
     complete_task: "Ticking off the task",
+    open_page: "Opening the page for you",
+    remember: "Making a note to remember",
+    recall: "Checking what I remember",
+    forget: "Forgetting that",
   };
 
   /* ---------- the shared chat panel ---------- */
@@ -311,11 +315,24 @@
       var startPage = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
       var job = HL.jobStart ? HL.jobStart(startPage, text.trim().slice(0, 42)) : null;
 
-      function release() { sending = false; input.focus(); }
+      function release() {
+        sending = false;
+        input.focus();
+        if (HL.buddy) HL.buddy.done();
+        HL.employeeBusy && HL.employeeBusy(opts.employee, false);
+      }
       function land(out) {
         settled = true;
         live.finish();
-        (out.actions || []).forEach(function (a) { opts.bench ? benchItem(a) : addActionCard(a); });
+        // A navigate action is the AI genuinely driving the app: the buddy
+        // walks to that part of the sidebar and the page actually changes.
+        var nav = (out.actions || []).filter(function (a) { return a.type === "navigate"; })[0];
+        (out.actions || []).forEach(function (a) {
+          if (a.type === "navigate") return;
+          opts.bench ? benchItem(a) : addActionCard(a);
+        });
+        if (nav && HL.buddy) HL.buddy.goToPage(nav.page, nav.why);
+        else if (nav) location.hash = "#/" + nav.page;
         if (out.reply) addMsg("bot", out.reply);
         benchStatus(false);
         release();
@@ -333,13 +350,23 @@
         if (job) HL.jobDone(job, "Couldn't finish: " + text.trim().slice(0, 36), false);
       }
 
+      // The buddy reacts to the same events the step list does — so when he
+      // walks across the screen it's because a tool really started, not
+      // because something told him to look busy.
+      if (HL.buddy) HL.buddy.think(opts.employee ? "Thinking…" : null);
+
       HL.stream("/api/chat/stream", payload, function (ev) {
         if (ev.phase === "model") { live.head("Thinking…"); if (job) HL.jobStep(job, "Thinking…"); }
         else if (ev.phase === "tool-start") {
           live.head("Working…"); live.toolStart(ev.tool);
           if (job) HL.jobStep(job, (HL.STEP_LABELS[ev.tool] || ev.tool.replace(/_/g, " ")) + "…");
+          if (HL.buddy) HL.buddy.tool(ev.tool, HL.STEP_LABELS[ev.tool]);
+          HL.employeeBusy && HL.employeeBusy(opts.employee, true);
         }
-        else if (ev.phase === "step") live.stepDone(ev.tool, ev.ok);
+        else if (ev.phase === "step") {
+          live.stepDone(ev.tool, ev.ok);
+          if (HL.buddy) HL.buddy.step(ev.ok);
+        }
         else if (ev.phase === "done") land(ev);
         else if (ev.phase === "error") fail(ev.error);
       })

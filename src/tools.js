@@ -395,6 +395,22 @@ const toolSchemas = [
     },
   },
   {
+    name: "open_page",
+    description: "Open a page in the owner's dashboard so they're looking at what you're talking about. Use it when your answer IS somewhere on screen — 'show me the calendar', 'where are my leads', 'take me to settings' — and after you've finished work the owner should see (e.g. you wrote posts, so open the social page). One call per answer at most; don't yank them around.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: {
+          type: "string",
+          enum: ["overview", "employees", "automations", "social", "website", "crm", "appointments", "analytics", "integrations", "team", "settings", "billing"],
+          description: "overview=home, employees=the AI team, crm=customers & leads, integrations=connect apps",
+        },
+        why: { type: "string", description: "Short reason shown to the owner, e.g. 'Here's this week's calendar'" },
+      },
+      required: ["page"],
+    },
+  },
+  {
     name: "research_competitor",
     description: "Read a competitor's website (crawls their real pages) and compare them against this business — their offer, strengths, and the gaps we can use. Use when the user names a competitor or asks who/what they're up against.",
     input_schema: {
@@ -684,6 +700,21 @@ function makeHandlers(base = dt.now(), employeeId) {
       store.saveCol("tasks", tasks);
       store.logActivity("task", `Task added: ${record.what}${dueAt ? ` (due ${formatWhen(dueAt)})` : ""}`, record.id);
       return { ok: true, content: `Task saved: "${record.what}"${dueAt ? ` due ${formatWhen(dueAt)}` : ""}.`, action: { type: "task", record } };
+    },
+
+    open_page(input) {
+      const PAGES = ["overview", "employees", "automations", "social", "website", "crm",
+        "appointments", "analytics", "integrations", "team", "settings", "billing"];
+      const page = String(input.page || "").trim();
+      if (!PAGES.includes(page)) return { ok: false, content: `No page called "${page}".` };
+      // The navigation itself happens in the browser — this hands it the
+      // instruction. The reply still has to stand on its own, because the
+      // owner may be reading it on a page that didn't change.
+      return {
+        ok: true,
+        content: `Opened the ${page} page for them.`,
+        action: { type: "navigate", page, why: String(input.why || "").slice(0, 80) },
+      };
     },
 
     get_knowledge() {

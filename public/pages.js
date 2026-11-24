@@ -117,6 +117,7 @@
           cell.style.animationDelay = (0.06 * ei) + "s";
           var b = HL.el("button", "cc-team-m" + (e.enabled ? " on" : "") + (emp === e.id ? " sel" : ""));
           b.title = e.name + " — " + e.role + (e.enabled ? "" : " (off)");
+          b.dataset.emp = e.id;
           b.innerHTML = '<span class="tm-ring"></span>' +
             (HL.botFace ? '<span class="tm-face">' + HL.botFace(e.id) + "</span>"
                         : '<span class="tm-init">' + HL.esc(e.name.charAt(0)) + "</span>");
@@ -213,6 +214,7 @@
 
           var top = HL.el("div", "emp-top");
           var av = HL.el("div", "emp-av emp-face" + (e.enabled ? " on" : ""));
+          av.dataset.emp = e.id;
           // their own pixel face, in their own colour (falls back to the initial)
           if (HL.botFace) av.innerHTML = HL.botFace(e.id);
           else av.textContent = e.name.charAt(0);
@@ -313,7 +315,8 @@
 
         /* -- hero: who they are, working state, controls -- */
         var hero = HL.el("section", "empo-hero");
-        var av = HL.el("div", "empo-face" + (e.enabled ? " working" : ""));
+        var av = HL.el("div", "empo-face" + (e.enabled ? " on-duty" : ""));
+        av.dataset.emp = e.id;
         if (HL.botFace) av.innerHTML = HL.botFace(e.id);
         hero.appendChild(av);
         var mid = HL.el("div", "empo-mid");

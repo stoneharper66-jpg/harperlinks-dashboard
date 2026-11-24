@@ -115,6 +115,31 @@
     if (ids.length > 1) p.querySelector(".wp-text").textContent += "  (+" + (ids.length - 1) + " more)";
   }
 
+  /* Which AI is genuinely mid-task right now.
+     Driven only by real tool-start / turn-finished events from the server,
+     so a face that's moving is a face doing something. Reference-counted:
+     two jobs for the same employee won't have the first one to finish stop
+     the animation while the second is still running. */
+  var EMP_BUSY = {};
+  HL.employeeBusy = function (id, on) {
+    if (!id) return;
+    EMP_BUSY[id] = Math.max(0, (EMP_BUSY[id] || 0) + (on ? 1 : -1));
+    var busy = EMP_BUSY[id] > 0;
+    document.querySelectorAll('[data-emp="' + id + '"]').forEach(function (el) {
+      el.classList.toggle("at-work", busy);
+    });
+  };
+  // Re-apply after a re-render, or a face repainted mid-task would go still
+  // while its AI is still working.
+  HL.repaintBusy = function () {
+    Object.keys(EMP_BUSY).forEach(function (id) {
+      if (!EMP_BUSY[id]) return;
+      document.querySelectorAll('[data-emp="' + id + '"]').forEach(function (el) {
+        el.classList.add("at-work");
+      });
+    });
+  };
+
   HL.jobStart = function (page, label) {
     var id = "job" + (++jobSeq);
     JOBS[id] = { page: page, label: label, step: "Working on it…" };
@@ -457,6 +482,7 @@
       if (current !== id) return; // user navigated away mid-load
       view.innerHTML = "";
       view.appendChild(el);
+      HL.repaintBusy();
     }).catch(function (e) {
       view.innerHTML = "";
       view.appendChild(HL.emptyState("⚠️", "This page hit a snag: " + e.message, "Retry", HL.navigate));
