@@ -16,6 +16,10 @@ const ledger = require("../src/credits/ledger");
 const charge = require("../src/credits/charge");
 const catalog = require("../src/credits/catalog");
 
+// These test the RULES, so they run with enforcement on. The rollout switch
+// ships OFF — that's covered by its own tests at the bottom of this file.
+catalog.FLAGS.enforceCredits = true;
+
 let seq = 0;
 const freshAccount = () => `chargeco${++seq}`;
 const as = (acc, fn) => tenant.run(acc, fn);
@@ -137,4 +141,66 @@ test("reserved credits are released if the work dies mid-flight", async () => {
       async () => { throw new Error("ffmpeg died"); }));
     assert.equal(ledger.balance(), before, "1600 credits returned in full");
   });
+});
+
+// ---- rollout safety ---------------------------------------------------------
+// These exist because shipping the backend before the UI nearly broke the live
+// product: nobody had a ledger, so enforcement would have refused every post,
+// image and website edit for every existing customer.
+
+test("with enforcement off, nothing is ever refused — but usage is still recorded", async () => {
+  const original = catalog.FLAGS.enforceCredits;
+  catalog.FLAGS.enforceCredits = false;      // the state it actually ships in
+  try {
+  await as(freshAccount(), async () => {
+    // no grant at all: balance zero
+    assert.equal(ledger.balance(), 0);
+    let ran = false;
+    const out = await charge.run("website.build", { planId: "starter" }, async () => { ran = true; return true; });
+    assert.equal(out.ok, true, "a paying customer must not be blocked mid-rollout");
+    assert.equal(ran, true);
+    // and the spend is on the books, so the numbers are real when we switch on.
+    // A big action lands as a `reserve` entry plus a commit marker, so look
+    // for the money rather than the most recent row.
+    const spend = ledger.history({ limit: 10 }).find((e) => e.delta === -1500);
+    assert.ok(spend, "the 1500 must be recorded somewhere");
+    assert.equal(spend.action_key, "website.build");
+    assert.equal(spend.employee, "web");
+    // and it must show in the breakdown, not just the raw ledger
+    assert.equal(ledger.summary("starter").byEmployee.web, 1500);
+  });
+  } finally { catalog.FLAGS.enforceCredits = original; }
+});
+
+test("an account that has never been granted is in grace even once enforcement is on", async () => {
+  const original = catalog.FLAGS.enforceCredits;
+  catalog.FLAGS.enforceCredits = true;
+  try {
+    await as(freshAccount(), async () => {
+      assert.equal(ledger.hasEverBeenGranted(), false);
+      const v = ledger.check("social.post", { planId: "starter" });
+      assert.equal(v.ok, true, "predates credits — not their fault");
+      assert.equal(v.grace, true);
+    });
+  } finally {
+    catalog.FLAGS.enforceCredits = original;
+  }
+});
+
+test("once granted, enforcement bites properly", async () => {
+  const original = catalog.FLAGS.enforceCredits;
+  catalog.FLAGS.enforceCredits = true;
+  try {
+    await as(freshAccount(), async () => {
+      await ledger.grantPlanCredits({ planId: "starter", invoiceId: "grace1" });
+      for (let i = 0; i < 200; i++) await ledger.charge("social.post");
+      assert.equal(ledger.balance(), 0);
+      assert.equal(ledger.check("social.post", { planId: "starter" }).ok, false,
+        "now it's real: no credits, no content");
+      assert.equal(ledger.check("crm.lead_capture", { planId: "starter" }).ok, true,
+        "but a lead still gets through");
+    });
+  } finally {
+    catalog.FLAGS.enforceCredits = original;
+  }
 });

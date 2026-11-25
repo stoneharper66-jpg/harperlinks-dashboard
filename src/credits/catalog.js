@@ -194,6 +194,19 @@ const FLAGS = {
   phoneReceptionist: false,
   // Waive the Launch Pack fee for anyone on annual billing. Off by default.
   waiveLaunchPackOnAnnual: false,
+
+  // The master switch for the whole rollout.
+  //
+  // While this is false, credits are COUNTED but never ENFORCED: every action
+  // still writes a usage entry, so real consumption data builds up, but
+  // nothing is ever refused. That is what makes it safe to ship the backend
+  // before the credit bar and the pricing page exist — on the day this went
+  // live nobody had a ledger, so enforcing would have blocked every post,
+  // image and website edit for every existing customer.
+  //
+  // Flip to true only once: customers can see their balance, the site sells
+  // credits, and the migration has granted everyone their first cycle.
+  enforceCredits: false,
 };
 
 // ---- helpers ----------------------------------------------------------------

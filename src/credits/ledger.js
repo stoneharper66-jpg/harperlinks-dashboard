@@ -145,17 +145,24 @@ function summary(planId, opts = {}) {
   const plan = catalog.plan(planId);
   const cycle = cycleWindow(data.entries, at);
 
-  const used = data.entries
-    .filter((e) => e.delta < 0 && e.type === "usage" && new Date(e.created_at) >= cycle.start)
-    .reduce((s, e) => s + -e.delta, 0);
+  // Spend shows up two ways: a plain `usage` entry for small actions, and a
+  // `reserve` entry for anything over the threshold. Counting only `usage`
+  // meant every expensive action — website builds, videos — was invisible in
+  // both the total and the per-employee breakdown.
+  const released = new Set();
+  data.entries.forEach((e) => { if (e.type === "refund" && e.ref_id) released.add(e.ref_id); });
+  const spent = data.entries.filter((e) =>
+    e.delta < 0 &&
+    (e.type === "usage" || (e.type === "reserve" && !released.has(e.id))) &&
+    new Date(e.created_at) >= cycle.start);
+
+  const used = spent.reduce((s, e) => s + -e.delta, 0);
 
   const byEmployee = {};
-  data.entries
-    .filter((e) => e.delta < 0 && e.type === "usage" && new Date(e.created_at) >= cycle.start)
-    .forEach((e) => {
-      const k = e.employee || "system";
-      byEmployee[k] = (byEmployee[k] || 0) + -e.delta;
-    });
+  spent.forEach((e) => {
+    const k = e.employee || "system";
+    byEmployee[k] = (byEmployee[k] || 0) + -e.delta;
+  });
 
   return {
     balance: r.balance,
@@ -223,6 +230,12 @@ function append(fields, opts = {}) {
     write(data);
     return { entry, duplicate: false };
   });
+}
+
+/** Has this account ever received credits? If not, it predates the rollout. */
+function hasEverBeenGranted() {
+  return read().entries.some((e) =>
+    e.delta > 0 && ["plan_grant", "topup", "launch_pack", "bonus"].includes(e.type));
 }
 
 function balance(opts = {}) {
@@ -303,6 +316,21 @@ function check(actionKey, { planId, units } = {}, opts = {}) {
     const a = catalog.action(actionKey);
     return { ok: false, cost: 0, reason: a ? `${a.label} isn't available yet.` : `Unknown action "${actionKey}".` };
   }
+
+  // Two reasons we allow work through without funds, both deliberate:
+  //
+  //  1. The rollout switch is off — we're counting, not enforcing.
+  //  2. This account has never been granted anything. That means it predates
+  //     credits entirely, and refusing it would be punishing a paying customer
+  //     for our migration not having run yet.
+  //
+  // In both cases the usage is still recorded, so the numbers are real when
+  // enforcement is switched on.
+  if (!catalog.FLAGS.enforceCredits || !hasEverBeenGranted()) {
+    return { ok: true, cost, balance: balance(opts), grace: true,
+             essential: catalog.isEssential(actionKey) };
+  }
+
   const bal = balance(opts);
   const essential = catalog.isEssential(actionKey);
   if (bal >= cost) return { ok: true, cost, balance: bal, essential };
@@ -406,7 +434,7 @@ function history({ limit = 200, type, employee, since } = {}) {
 }
 
 module.exports = {
-  append, balance, summary, replay, history, check, reserve, charge,
+  append, balance, summary, replay, history, check, reserve, charge, hasEverBeenGranted,
   grantPlanCredits, grantTopup, grantLaunchPack, grantBonus,
   cycleWindow, TYPES,
 };

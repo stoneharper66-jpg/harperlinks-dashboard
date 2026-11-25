@@ -20,6 +20,10 @@ const store = require("../src/store");
 const catalog = require("../src/credits/catalog");
 const ledger = require("../src/credits/ledger");
 
+// These test the RULES, so they run with enforcement on. The rollout switch
+// ships off — that's covered by its own tests at the bottom of charge.test.js.
+require("../src/credits/catalog").FLAGS.enforceCredits = true;
+
 const ACCOUNT = "testco";
 let seq = 0;
 function freshAccount() {
