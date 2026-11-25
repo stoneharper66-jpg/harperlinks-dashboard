@@ -154,7 +154,9 @@ function publicUser(u) {
   };
 }
 
-const PLANS = ["professional", "business", "enterprise"];
+// The plan list lives in the credit catalog — one source of truth, so adding
+// a plan there doesn't silently fail validation here.
+const PLANS = require("./credits/catalog").PLAN_IDS;
 const PLAN_STATUSES = ["trial", "active", "paused", "cancelled"];
 function setPlan(userId, { plan, planStatus }) {
   const users = getUsers();
@@ -162,7 +164,7 @@ function setPlan(userId, { plan, planStatus }) {
   if (!u) throw new Error("No such user.");
   if (u.role === "admin") throw new Error("Admins don't have subscriptions.");
   if (plan !== undefined) {
-    if (!PLANS.includes(plan)) throw new Error("Plan must be professional, business or enterprise.");
+    if (!PLANS.includes(plan)) throw new Error(`Plan must be one of: ${PLANS.join(", ")}.`);
     u.plan = plan;
   }
   if (planStatus !== undefined) {

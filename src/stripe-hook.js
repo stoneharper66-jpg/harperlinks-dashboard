@@ -15,6 +15,8 @@ const store = require("./store");
 const tenant = require("./tenant");
 const notify = require("./notify");
 const claims = require("./claims");
+const ledger = require("./credits/ledger");
+const catalog = require("./credits/catalog");
 
 const TOLERANCE_S = 300; // reject replays older than 5 minutes
 
@@ -43,8 +45,12 @@ function verify(rawBody, header, secret) {
 
 // Readable but not guessable — the team shares it once, the customer changes it.
 
-const PLAN_BY_AMOUNT = { 24900: "professional", 49900: "business", 99900: "enterprise" };
-const PLANS = ["professional", "business", "enterprise"];
+// Amounts in cents → plan. Derived from the catalog so a price change in one
+// place can't leave this map lying.
+const PLAN_BY_AMOUNT = Object.fromEntries(
+  catalog.PLAN_IDS.map((id) => [catalog.PLANS[id].priceAUD * 100, id])
+);
+const PLANS = catalog.PLAN_IDS;
 
 // Every one of our links starts with a 7-day free trial, so the checkout that
 // arrives charges $0 — the amount can't tell us which plan they picked. Ask
@@ -201,6 +207,96 @@ Once they're in:
   return { ok: true, claimId: claim.id, plan, emailed: welcome.sent };
 }
 
+
+// ---- credits ----------------------------------------------------------------
+
+/** Which account does this Stripe customer belong to? */
+function accountForCustomer(customerId, email) {
+  const users = auth.getUsers();
+  const byEmail = email && users.find((u) => u.email === String(email).toLowerCase());
+  if (byEmail) return byEmail;
+  return users.find((u) => u.stripeCustomerId === customerId) || null;
+}
+
+/**
+ * The monthly grant. Fires on invoice.paid, which is the only event that
+ * means money actually arrived — checkout.session.completed fires on a $0
+ * trial signup too, and granting there would hand out a free month.
+ *
+ * Idempotent on the invoice id, so Stripe retrying costs nothing.
+ */
+async function handleInvoicePaid(invoice) {
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : (invoice.customer && invoice.customer.id);
+  const email = invoice.customer_email || (invoice.customer_details && invoice.customer_details.email);
+  const user = accountForCustomer(customerId, email);
+  if (!user) {
+    tenant.run(tenant.MAIN, () => store.logActivity("system",
+      `invoice.paid for ${email || customerId} — no matching account yet, so no credits granted`));
+    return { ok: false, reason: "no account for this customer" };
+  }
+
+  const planId = catalog.PLANS[user.plan] ? user.plan : catalog.DEFAULT_PLAN;
+  const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : undefined;
+
+  const out = await tenant.run(user.accountId, () =>
+    ledger.grantPlanCredits({ planId, invoiceId: invoice.id, periodStart }));
+
+  tenant.run(user.accountId, () => store.logActivity("system", out.duplicate
+    ? `invoice.paid replayed — credits already granted for ${invoice.id}`
+    : `${catalog.plan(planId).name}: ${catalog.plan(planId).monthlyCredits} credits granted`));
+
+  return { ok: true, granted: !out.duplicate, plan: planId, accountId: user.accountId };
+}
+
+/**
+ * A one-off purchase: a top-up pack, a Launch Pack or an add-on.
+ * Which one is carried in the checkout session's metadata, so a single
+ * webhook route handles all three.
+ */
+async function handleOneOffPurchase(session) {
+  const meta = session.metadata || {};
+  const kind = meta.credit_kind;                    // "topup" | "launch_pack" | "addon"
+  if (!kind) return { ok: false, reason: "not a credit purchase" };
+
+  const email = (session.customer_details && session.customer_details.email) || session.customer_email;
+  const customerId = typeof session.customer === "string" ? session.customer : (session.customer && session.customer.id);
+  const user = accountForCustomer(customerId, email);
+  if (!user) return { ok: false, reason: "no account for this customer" };
+
+  const packId = meta.pack_id;
+  let out;
+  if (kind === "topup") {
+    out = await tenant.run(user.accountId, () =>
+      ledger.grantTopup({ packId, sessionId: session.id }));
+  } else {
+    out = await tenant.run(user.accountId, () =>
+      ledger.grantLaunchPack({ packId, sessionId: session.id }));
+    // Setup work needs a human. Put it on the team's list.
+    if (!out.duplicate) {
+      tenant.run(tenant.MAIN, () => {
+        const tasks = store.getCol("tasks");
+        const pack = catalog.LAUNCH_PACKS[packId] || catalog.ADDONS[packId];
+        tasks.push({
+          id: store.newId("task"),
+          what: `Onboarding: ${pack ? pack.name : packId} for ${user.email}`,
+          detail: pack ? pack.includes.join(" · ") : "",
+          accountId: user.accountId,
+          status: "open",
+          createdAt: new Date().toISOString(),
+        });
+        store.saveCol("tasks", tasks);
+        store.logActivity("system", `🎁 ${pack ? pack.name : packId} bought by ${user.email} — onboarding task created`);
+      });
+    }
+  }
+
+  tenant.run(user.accountId, () => store.logActivity("system", out.duplicate
+    ? `Purchase replayed — credits already granted for ${session.id}`
+    : `${out.entry.delta} credits added (${out.entry.note})`));
+
+  return { ok: true, granted: !out.duplicate, credits: out.entry.delta, accountId: user.accountId };
+}
+
 async function handle(rawBody, signature, secret) {
   const v = verify(rawBody, signature, secret);
   if (!v.ok) return { status: 400, body: { error: `Signature check failed: ${v.reason}` } };
@@ -209,11 +305,44 @@ async function handle(rawBody, signature, secret) {
   try { event = JSON.parse(rawBody); } catch { return { status: 400, body: { error: "bad JSON" } }; }
 
   if (event.type === "checkout.session.completed") {
-    const out = await handleCheckout(event.data.object);
+    const session = event.data.object;
+    // A one-off purchase (top-up / Launch Pack) is tagged in its metadata;
+    // anything else is a new subscription signup.
+    if (session.metadata && session.metadata.credit_kind) {
+      const out = await handleOneOffPurchase(session);
+      return { status: 200, body: { received: true, result: out } };
+    }
+    const out = await handleCheckout(session);
     return { status: 200, body: { received: true, result: out } };
   }
   // Everything else is acknowledged so Stripe stops retrying it.
+  if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+    const out = await handleInvoicePaid(event.data.object);
+    return { status: 200, body: { received: true, result: out } };
+  }
+
+  // A subscription ending or failing changes what they're entitled to. Until
+  // now these were acknowledged and thrown away, so a cancellation was
+  // invisible to the app.
+  if (event.type === "customer.subscription.deleted") {
+    const sub = event.data.object;
+    const user = accountForCustomer(typeof sub.customer === "string" ? sub.customer : null);
+    if (user) {
+      auth.setPlan(user.id, { planStatus: "cancelled" });
+      tenant.run(tenant.MAIN, () => store.logActivity("auth", `Subscription cancelled: ${user.email}`));
+    }
+    return { status: 200, body: { received: true, cancelled: !!user } };
+  }
+  if (event.type === "invoice.payment_failed") {
+    const inv = event.data.object;
+    const user = accountForCustomer(typeof inv.customer === "string" ? inv.customer : null, inv.customer_email);
+    if (user) {
+      tenant.run(tenant.MAIN, () => store.logActivity("system", `⚠️ Payment failed for ${user.email} — credits not granted`));
+    }
+    return { status: 200, body: { received: true, noted: !!user } };
+  }
+
   return { status: 200, body: { received: true, ignored: event.type } };
 }
 
-module.exports = { handle, verify };
+module.exports = { handle, verify, handleInvoicePaid, handleOneOffPurchase };
