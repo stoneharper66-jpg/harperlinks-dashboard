@@ -1,10 +1,11 @@
 {
   "name": "harperlinks-automation",
   "version": "0.1.0",
-  "description": "HarperLinks — business automation platform: AI content bot, website ingestion, smart calendar, auto-posting.",
+  "description": "HarperLinks \u2014 business automation platform: AI content bot, website ingestion, smart calendar, auto-posting.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "license": "UNLICENSED",
   "private": true,
