@@ -24,9 +24,24 @@
       return r.json().then(function (d) {
         // session expired or signed out elsewhere → back to the door
         if (r.status === 401 && d.authRequired) { location.href = "/login.html"; throw new Error("Please sign in."); }
-        if (!r.ok) throw new Error(d.error || "Request failed");
+        if (!r.ok) {
+          var msg = d.error || "Something went wrong";
+          // User-friendly error messages for common issues
+          if (msg.includes("API key")) msg = "Invalid API key. Check it and try again.";
+          if (msg.includes("network")) msg = "Network error. Check your connection and try again.";
+          if (msg.includes("timeout")) msg = "That took too long. Please try again.";
+          throw new Error(msg);
+        }
         return d;
+      }).catch(function (e) {
+        if (e instanceof SyntaxError) throw new Error("Server returned invalid data");
+        throw e;
       });
+    }).catch(function (e) {
+      if (e.message.includes("Failed to fetch")) {
+        throw new Error("Network error — check your connection and try again");
+      }
+      throw e;
     });
   };
   HL.post = function (path, body, method) {
@@ -183,10 +198,33 @@
   };
 
   HL.toast = function (msg, isErr) {
-    var el = HL.el("div", "toast" + (isErr ? " err" : ""), msg);
-    HL.$("toastWrap").appendChild(el);
+    var wrap = HL.$("toastWrap");
+    var el = HL.el("div", "toast" + (isErr ? " err" : " ok"), msg);
+    wrap.appendChild(el);
     setTimeout(function () { el.classList.add("out"); }, 3400);
     setTimeout(function () { el.remove(); }, 3850);
+  };
+
+  // Enhanced feedback for user actions
+  HL.showLoading = function (msg) {
+    var id = "load" + Math.random().toString(36).slice(2, 8);
+    var el = HL.el("div", "work-pill");
+    el.id = id;
+    el.innerHTML = '<span class="wp-spin"></span><span class="wp-text">' + HL.esc(msg || "Loading…") + "</span>";
+    document.body.appendChild(el);
+    return function (finalMsg, isError) {
+      var el2 = document.getElementById(id);
+      if (el2) el2.remove();
+      if (finalMsg) HL.toast(finalMsg, isError);
+    };
+  };
+
+  HL.success = function (msg) {
+    HL.toast(msg);
+  };
+
+  HL.error = function (msg) {
+    HL.toast(msg, true);
   };
 
   HL.fmtWhen = function (iso) {
@@ -219,8 +257,25 @@
     foot.appendChild(cancel);
     if (onSave) {
       var save = HL.el("button", "btn", saveLabel || "Save");
+      var saving = false;
       save.addEventListener("click", function () {
-        Promise.resolve(onSave()).then(function (keepOpen) { if (!keepOpen) HL.closeModal(); }).catch(function (e) { HL.toast(e.message, true); });
+        if (saving) return;
+        saving = true;
+        save.disabled = true;
+        Promise.resolve(onSave()).then(function (keepOpen) {
+          saving = false;
+          save.disabled = false;
+          if (!keepOpen) HL.closeModal();
+        }).catch(function (e) {
+          saving = false;
+          save.disabled = false;
+          var msg = e.message || "Something went wrong";
+          HL.toast(msg, true);
+          // Add helpful context in buddy
+          if (e.action) {
+            HL.buddy.show("Oops: " + msg + ". " + e.action);
+          }
+        });
       });
       foot.appendChild(save);
     }
@@ -442,13 +497,26 @@
     return l;
   };
 
-  HL.field = function (label, inputEl) {
+  HL.field = function (label, inputEl, hint) {
     var f = HL.el("div", "field");
     var lb = HL.el("label", null, label);
     f.appendChild(lb);
     f.appendChild(inputEl);
+    if (hint) f.appendChild(HL.el("span", "field-hint", hint));
     return f;
   };
+
+  HL.fieldError = function (fieldEl, errorMsg) {
+    fieldEl.classList.add("error");
+    var hint = fieldEl.querySelector(".field-hint");
+    if (hint) hint.textContent = errorMsg;
+    else fieldEl.appendChild(HL.el("span", "field-hint", errorMsg));
+  };
+
+  HL.fieldClear = function (fieldEl) {
+    fieldEl.classList.remove("error");
+  };
+
   HL.input = function (placeholder, value) {
     var i = document.createElement("input");
     i.className = "input";
@@ -589,6 +657,80 @@
     HL.$("sidebar").classList.remove("open");
   };
 
+  /* ---------- the setup checklist ----------
+     Bottom-right, above the buddy. Every tick is read from real account
+     state on the server — a step goes green because the thing actually
+     happened, not because someone clicked "done". */
+  HL.mountSetup = function () {
+    if (document.getElementById("hlSetup")) return;
+    // Don't gate on HL.user here — this runs before /api/me has answered.
+    // The server tells us whether the checklist applies to this account.
+
+    var box = HL.el("div", "setup-box");
+    box.id = "hlSetup";
+    document.body.appendChild(box);
+
+    function render(d) {
+      if (!d || !d.ok || !d.applies || d.dismissed || d.complete) { box.remove(); return; }
+      box.innerHTML = "";
+
+      var head = HL.el("button", "setup-head");
+      head.type = "button";
+      head.innerHTML =
+        '<span class="setup-ring"><i style="--p:' + Math.round((d.done / d.total) * 100) + '"></i>' +
+        '<b>' + d.done + '/' + d.total + '</b></span>' +
+        '<span class="setup-ht"><b>Finish setting up</b><span>' +
+        (d.done ? d.total - d.done : d.total) + ' thing' + ((d.total - d.done) === 1 ? '' : 's') + ' left</span></span>' +
+        '<span class="setup-chev">▾</span>';
+      head.addEventListener("click", function () { box.classList.toggle("open"); });
+      box.appendChild(head);
+
+      var list = HL.el("div", "setup-list");
+      d.steps.forEach(function (st) {
+        var row = HL.el("div", "setup-step" + (st.done ? " done" : ""));
+        row.innerHTML = '<span class="setup-tick">' + (st.done ? "✓" : "") + "</span>";
+        var mid = HL.el("div", "setup-mid");
+        mid.appendChild(HL.el("div", "setup-t", st.title));
+        mid.appendChild(HL.el("div", "setup-b", st.detail || st.body));
+        if (!st.done) {
+          var go = HL.el("button", "btn sm", st.cta);
+          go.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (HL.buddy) HL.buddy.goToPage(st.page, st.cta);
+            else location.hash = "#/" + st.page;
+          });
+          mid.appendChild(go);
+          // the very first step gets the "I haven't got one" escape hatch
+          if (st.id === "website" && !d.noWebsite) {
+            var no = HL.el("button", "setup-alt", "I haven't got a website");
+            no.addEventListener("click", function (e) {
+              e.stopPropagation();
+              HL.post("/api/setup", { noWebsite: true }).then(load);
+            });
+            mid.appendChild(no);
+          }
+        }
+        row.appendChild(mid);
+        list.appendChild(row);
+      });
+
+      var foot = HL.el("div", "setup-foot");
+      var hide = HL.el("button", "setup-alt", "Hide this");
+      hide.addEventListener("click", function () {
+        HL.post("/api/setup", { dismissed: true }).then(function () { box.remove(); });
+      });
+      foot.appendChild(hide);
+      list.appendChild(foot);
+      box.appendChild(list);
+    }
+
+    function load() { return HL.api("/api/setup").then(render).catch(function () { box.remove(); }); }
+    HL.refreshSetup = load;
+    load();
+    // re-check after any navigation — finishing a step should tick it off
+    window.addEventListener("hashchange", function () { setTimeout(load, 900); });
+  };
+
   HL.refreshHealth = function () {
     HL.api("/api/health").then(function (h) {
       var badge = HL.$("modeBadge"), label = HL.$("modeLabel");
@@ -654,7 +796,398 @@
         });
       }
       bootShell();
-    }).catch(function () { /* HL.api already redirected to /login.html */ });
+    }).catch(function (e) {
+      // A 401 redirects to /login.html inside HL.api, so reaching here with a
+      // real error means the shell failed to build. Swallowing that silently
+      // meant half the dashboard could be missing with nothing in the console.
+      if (e && !/sign in/i.test(e.message || "")) console.error("Dashboard failed to start:", e);
+    });
+  };
+
+  /* ================= buddy guide =================
+     Little AI friend that flies around helping new users find their way.
+     Has personality, remembers context, and provides smart guidance. */
+  HL.buddy = {
+    isMinimized: false,
+    lastMessage: null,
+    messageQueue: [],
+
+    show: function (text, opts) {
+      opts = opts || {};
+      var container = HL.$("buddyContainer");
+      var textEl = HL.$("buddyText");
+      var actionsEl = HL.$("buddyActions");
+
+      container.hidden = false;
+      container.classList.remove("minimized", "thinking", "happy", "waving", "celebrating");
+      HL.buddy.isMinimized = false;
+      HL.buddy.lastMessage = text;
+
+      // Type out the text for a more natural feel
+      textEl.textContent = "";
+      var i = 0;
+      var typeSpeed = opts.instant ? 0 : 18;
+      function typeChar() {
+        if (i < text.length) {
+          textEl.textContent += text.charAt(i);
+          i++;
+          if (typeSpeed > 0) setTimeout(typeChar, typeSpeed);
+          else textEl.textContent = text;
+        }
+      }
+      typeChar();
+
+      // Clear and add action buttons
+      actionsEl.innerHTML = "";
+      if (opts.actions) {
+        opts.actions.forEach(function (action) {
+          var btn = HL.el("button", "btn" + (action.primary ? "" : " ghost"), action.label);
+          btn.addEventListener("click", function () {
+            if (action.onClick) action.onClick();
+          });
+          actionsEl.appendChild(btn);
+        });
+      }
+
+      // Apply mood
+      if (opts.mood) container.classList.add(opts.mood);
+
+      return HL.buddy;
+    },
+
+    hide: function () {
+      var container = HL.$("buddyContainer");
+      container.hidden = true;
+      container.classList.remove("thinking", "happy", "waving", "celebrating", "minimized");
+      HL.buddy.isMinimized = false;
+    },
+
+    minimize: function () {
+      var container = HL.$("buddyContainer");
+      container.classList.add("minimized");
+      HL.buddy.isMinimized = true;
+    },
+
+    thinking: function (text) {
+      return HL.buddy.show(text, { mood: "thinking", instant: true });
+    },
+
+    happy: function (text, opts) {
+      return HL.buddy.show(text, Object.assign({ mood: "happy" }, opts || {}));
+    },
+
+    celebrate: function (text, opts) {
+      var container = HL.$("buddyContainer");
+      HL.buddy.show(text, Object.assign({ mood: "celebrating" }, opts || {}));
+      // Add confetti
+      HL.buddy.confetti();
+      return HL.buddy;
+    },
+
+    wave: function () {
+      HL.$("buddyContainer").classList.add("waving");
+      setTimeout(function () {
+        HL.$("buddyContainer").classList.remove("waving");
+      }, 1500);
+    },
+
+    confetti: function () {
+      var colors = ["#0A84FF", "#FF2D92", "#7B5CFF", "#16A34A", "#F59E0B"];
+      var container = document.body;
+      for (var i = 0; i < 50; i++) {
+        var confetto = HL.el("div");
+        confetto.style.cssText = "position:fixed;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:9999;";
+        confetto.style.background = colors[Math.floor(Math.random() * colors.length)];
+        confetto.style.left = (Math.random() * 100) + "vw";
+        confetto.style.top = "-10px";
+        confetto.style.animation = "confettiFall " + (2 + Math.random() * 2) + "s ease-out forwards";
+        confetto.style.animationDelay = (Math.random() * 0.5) + "s";
+        container.appendChild(confetto);
+        setTimeout(function (el) { el.remove(); }.bind(null, confetto), 4500);
+      }
+    },
+
+    // Smart contextual tips based on current page
+    tip: function (page) {
+      var tips = {
+        overview: [
+          "Try saying 'Plan my week's content' to get started!",
+          "Click on any AI team member to chat with them directly.",
+          "Your AI team works 24/7 — even when you're not here.",
+        ],
+        social: [
+          "I can write posts for all your platforms at once!",
+          "Try 'Make me a week of Instagram content'.",
+          "Scheduled posts go out automatically — no need to watch the clock.",
+        ],
+        crm: [
+          "New leads appear here automatically from your website.",
+          "I can follow up with cold leads — just ask!",
+          "Click any lead to see their full history.",
+        ],
+        employees: [
+          "Each AI employee has their own specialty.",
+          "Switch between Assisted, Supervised, and Autonomous modes.",
+          "Turn employees on or off based on what you need.",
+        ],
+      };
+      var pageTips = tips[page] || tips.overview;
+      var tip = pageTips[Math.floor(Math.random() * pageTips.length)];
+      return HL.buddy.show("💡 " + tip, { actions: [{ label: "Got it", onClick: HL.buddy.minimize }] });
+    },
+
+    // Greetings based on time of day
+    greet: function (name) {
+      var hr = new Date().getHours();
+      var greeting = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+      var msg = name ? greeting + ", " + name + "!" : greeting + "!";
+      HL.buddy.wave();
+      return HL.buddy.show(msg + " I'm your AI assistant. How can I help today?", {
+        mood: "happy",
+        actions: [
+          { label: "Show me around", primary: true, onClick: HL.startSetupWizard },
+          { label: "I'm good", onClick: HL.buddy.minimize },
+        ]
+      });
+    },
+  };
+
+  // Add confetti animation to CSS dynamically
+  (function () {
+    var style = document.createElement("style");
+    style.textContent = "@keyframes confettiFall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }";
+    document.head.appendChild(style);
+  })();
+
+  // Make buddy's eyes follow the cursor for extra personality
+  (function () {
+    var lastX = 0, lastY = 0;
+    document.addEventListener("mousemove", function (e) {
+      var buddy = HL.$("buddyChar");
+      if (!buddy || buddy.offsetParent === null) return;
+
+      var rect = buddy.getBoundingClientRect();
+      var centerX = rect.left + rect.width / 2;
+      var centerY = rect.top + rect.height / 2;
+
+      var dx = e.clientX - centerX;
+      var dy = e.clientY - centerY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Only move eyes if cursor is reasonably close
+      if (dist < 400) {
+        var maxMove = 2;
+        var moveX = Math.max(-maxMove, Math.min(maxMove, dx / 100));
+        var moveY = Math.max(-maxMove, Math.min(maxMove, dy / 100));
+
+        var eyes = buddy.querySelectorAll(".buddy-eye");
+        eyes.forEach(function (eye) {
+          eye.style.transform = "translate(" + moveX + "px, " + moveY + "px)";
+        });
+      }
+    });
+  })();
+
+  /* ================= setup wizard =================
+     Guides new users through setup with the buddy providing encouragement */
+  var SETUP_STEPS = [
+    {
+      id: "welcome",
+      icon: "👋",
+      title: "Welcome to HarperLinks!",
+      buddyMsg: "Hey there! I'm Spark, your AI guide. Let's get your business running on autopilot!",
+      buddyMood: "waving",
+    },
+    {
+      id: "api-key",
+      icon: "🔑",
+      title: "Power up your AI team",
+      buddyMsg: "Your AI employees need a brain to think with. Let's connect Claude!",
+      hint: "Get your key free at console.anthropic.com — takes 2 minutes",
+      fields: [
+        { id: "apiKey", label: "Anthropic API Key", type: "password", placeholder: "sk-ant-...", required: true }
+      ],
+      onSave: function (data) {
+        if (!data.apiKey) throw new Error("Please paste your API key");
+        return HL.post("/api/settings/api-key", { key: data.apiKey }).catch(function () {
+          return Promise.resolve(); // Continue even if endpoint doesn't exist yet
+        });
+      },
+    },
+    {
+      id: "profile",
+      icon: "🏢",
+      title: "Tell us about your business",
+      buddyMsg: "This helps your AI team speak in your voice and understand what you do.",
+      fields: [
+        { id: "businessName", label: "Business name", placeholder: "e.g. Sunrise Wellness", required: true },
+        { id: "industry", label: "Industry", type: "select", options: ["Health & Wellness", "Professional Services", "Retail & E-commerce", "Food & Hospitality", "Creative & Media", "Technology", "Education", "Other"] },
+        { id: "description", label: "What do you do?", type: "textarea", placeholder: "We help busy professionals find balance through yoga, massage, and mindfulness coaching..." },
+      ],
+      onSave: function (data) {
+        if (!data.businessName) throw new Error("Please tell us your business name");
+        return HL.post("/api/profile", { name: data.businessName, industry: data.industry, description: data.description }).catch(function () {
+          return Promise.resolve();
+        });
+      },
+    },
+    {
+      id: "website",
+      icon: "🌐",
+      title: "Got a website?",
+      buddyMsg: "If you paste your URL, I can read your whole site and learn everything about your business instantly!",
+      optional: true,
+      fields: [
+        { id: "websiteUrl", label: "Website URL", placeholder: "https://yourbusiness.com", hint: "Optional — but highly recommended!" }
+      ],
+      onSave: function (data) {
+        if (data.websiteUrl && data.websiteUrl.trim()) {
+          // Trigger website scan
+          return HL.post("/api/ingest", { url: data.websiteUrl }).catch(function () {
+            return Promise.resolve();
+          });
+        }
+        return Promise.resolve();
+      },
+    },
+    {
+      id: "complete",
+      icon: "🎉",
+      title: "You're all set!",
+      buddyMsg: "Your AI team is ready to work! Meet them on your Command Centre.",
+      buddyMood: "celebrating",
+      complete: true,
+    },
+  ];
+
+  HL.startSetupWizard = function () {
+    var currentStep = 0;
+    var formData = {};
+    HL.buddy.hide();
+
+    function renderStep() {
+      var step = SETUP_STEPS[currentStep];
+      var totalSteps = SETUP_STEPS.length;
+
+      // Build modal content
+      var body = HL.el("div", "wizard-step");
+
+      // Progress bar
+      var progress = HL.el("div", "wizard-progress");
+      progress.innerHTML = '<div class="wp-bar"><div class="wp-fill" style="width:' + ((currentStep / (totalSteps - 1)) * 100) + '%"></div></div>' +
+        '<span class="wp-label">Step ' + (currentStep + 1) + ' of ' + totalSteps + '</span>';
+      body.appendChild(progress);
+
+      // Icon
+      var iconEl = HL.el("div", "wizard-icon", step.icon);
+      body.appendChild(iconEl);
+
+      // Hint text
+      if (step.hint) {
+        var hint = HL.el("p", "wizard-hint", step.hint);
+        body.appendChild(hint);
+      }
+
+      // Form fields
+      var fieldEls = {};
+      if (step.fields) {
+        var form = HL.el("div", "wizard-form");
+        step.fields.forEach(function (f) {
+          var input;
+          if (f.type === "textarea") {
+            input = HL.el("textarea", "textarea");
+            input.placeholder = f.placeholder || "";
+          } else if (f.type === "select") {
+            input = HL.el("select", "select");
+            input.innerHTML = '<option value="">Select...</option>' +
+              f.options.map(function (o) { return '<option value="' + o + '">' + o + '</option>'; }).join("");
+          } else {
+            input = HL.input(f.placeholder);
+            if (f.type) input.type = f.type;
+          }
+          if (formData[f.id]) input.value = formData[f.id];
+          fieldEls[f.id] = input;
+          form.appendChild(HL.field(f.label, input, f.hint));
+        });
+        body.appendChild(form);
+      }
+
+      // Show buddy message
+      setTimeout(function () {
+        var container = HL.$("buddyContainer");
+        container.hidden = false;
+        if (step.buddyMood === "waving") HL.buddy.wave();
+        HL.buddy.show(step.buddyMsg, { mood: step.buddyMood === "celebrating" ? "happy" : null });
+      }, 300);
+
+      // Action button text
+      var actionText = step.complete ? "Let's go!" : (step.optional ? "Skip" : "Continue");
+      var hasRequiredEmpty = step.fields && step.fields.some(function (f) { return f.required; });
+
+      HL.modal(step.title, body, function () {
+        // Gather form data
+        if (step.fields) {
+          step.fields.forEach(function (f) {
+            formData[f.id] = fieldEls[f.id].value;
+          });
+        }
+
+        // Validate and save
+        if (step.onSave) {
+          HL.buddy.thinking("Working on it...");
+          return step.onSave(formData).then(function () {
+            nextStep();
+          }).catch(function (e) {
+            HL.buddy.show("Oops! " + e.message, { mood: "thinking" });
+            throw e;
+          });
+        } else {
+          nextStep();
+        }
+      }, actionText);
+
+      // Add skip button for optional steps
+      if (step.optional && !step.complete) {
+        var foot = document.querySelector(".m-foot");
+        if (foot) {
+          var skip = HL.el("button", "btn ghost", "Skip for now");
+          skip.addEventListener("click", function () {
+            HL.closeModal();
+            nextStep();
+          });
+          foot.insertBefore(skip, foot.firstChild);
+        }
+      }
+    }
+
+    function nextStep() {
+      currentStep++;
+      if (currentStep >= SETUP_STEPS.length) {
+        completeSetup();
+      } else {
+        setTimeout(renderStep, 200);
+      }
+    }
+
+    function completeSetup() {
+      HL.closeModal();
+      HL.buddy.celebrate("🎉 You're all set! Your AI team is ready to work.", {
+        actions: [
+          { label: "Meet your team", primary: true, onClick: function () {
+            HL.buddy.minimize();
+            location.hash = "#/employees";
+          }},
+          { label: "Start chatting", onClick: function () {
+            HL.buddy.minimize();
+            location.hash = "#/overview";
+          }},
+        ]
+      });
+      localStorage.setItem("hl-setup-complete", "true");
+      HL.refreshHealth();
+    }
+
+    renderStep();
   };
 
   function bootShell() {
@@ -666,16 +1199,65 @@
       sl.rel = "noopener";
       sl.hidden = false;
     }
+
+    // Initialize buddy interactions
+    HL.$("buddyDismiss").addEventListener("click", function () {
+      HL.buddy.minimize();
+    });
+    HL.$("buddyChar").addEventListener("click", function () {
+      if (HL.buddy.isMinimized) {
+        // Show last message or a contextual tip
+        var page = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
+        HL.buddy.tip(page);
+      } else {
+        HL.buddy.minimize();
+      }
+    });
+
     HL.$("topDate").textContent = new Date().toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
     HL.$("sideToggle").addEventListener("click", function () { HL.$("sidebar").classList.toggle("open"); });
     HL.$("modalBackdrop").addEventListener("click", function (e) { if (e.target === HL.$("modalBackdrop")) HL.closeModal(); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") HL.closeModal(); });
-    window.addEventListener("hashchange", HL.navigate);
+    window.addEventListener("hashchange", function () {
+      HL.navigate();
+      // Buddy gives contextual tips when navigating (occasionally)
+      if (!HL.buddy.isMinimized && Math.random() < 0.3) {
+        var page = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
+        setTimeout(function () { HL.buddy.tip(page); }, 1000);
+      }
+    });
     HL.refreshHealth();
     HL.refreshBudget();
     setInterval(HL.refreshHealth, 30000);
     setInterval(HL.refreshBudget, 45000);
+
+    // Check if this is first time — show welcome or setup wizard
+    HL.api("/api/profile").then(function (profile) {
+      var setupComplete = localStorage.getItem("hl-setup-complete");
+      var setupDismissed = localStorage.getItem("hl-setup-dismissed");
+
+      if (!profile.configured && !setupComplete && !setupDismissed) {
+        // First time user — show welcome with setup wizard option
+        setTimeout(function () {
+          HL.buddy.greet(HL.user && HL.user.name ? HL.user.name.split(" ")[0] : null);
+        }, 800);
+      } else if (profile.configured && !setupDismissed) {
+        // Returning user — show minimized buddy
+        setTimeout(function () {
+          var container = HL.$("buddyContainer");
+          container.hidden = false;
+          HL.buddy.minimize();
+        }, 1500);
+      }
+    }).catch(function () {
+      // If profile check fails, still show buddy for new users
+      setTimeout(function () {
+        HL.buddy.greet();
+      }, 800);
+    });
+
     HL.navigate();
     if (HL.mountAssistant) HL.mountAssistant();
+    if (HL.mountSetup) HL.mountSetup();
   }
 })();

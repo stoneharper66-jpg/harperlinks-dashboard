@@ -1309,6 +1309,92 @@ app.post("/api/plan", (req, res) => {
   });
 });
 
+// ---- setup checklist ---------------------------------------------------------
+// Every step's "done" is read from real account state, never from a flag we
+// set when someone clicked something. A step can't be ticked by pretending.
+app.get("/api/setup", (req, res) => {
+  const profile = store.getProfile();
+  const kb = store.getKnowledge();
+  const link = ghl.linkedPlatforms();
+  const posts = store.getPosts();
+  const site = store.getCol("website", {});
+  const state = store.getCol("setup-state", {});
+
+  const steps = [
+    {
+      id: "website",
+      title: "Point us at your website",
+      body: "Paste your address and your AI team reads it — what you sell, how you talk, who you serve.",
+      done: !!profile.configured,
+      detail: profile.configured ? `Learned ${profile.name}` : null,
+      cta: "Add my website", page: "website",
+    },
+    {
+      id: "knowledge",
+      title: "Check what they learned",
+      body: "The scan fills most of this in. Fix anything that's off and add your prices.",
+      done: !!(kb.description && (kb.services || []).length),
+      detail: kb.updatedAt ? "Last edited " + kb.updatedAt.slice(0, 10) : null,
+      cta: "Open Settings", page: "settings",
+    },
+    {
+      id: "connect",
+      title: "Connect where you post",
+      body: "Sign in to Instagram or Facebook and tap Authorise. Until then, posts are written and scheduled but held back.",
+      done: link.platforms.length > 0,
+      detail: link.platforms.length ? "Live on " + link.platforms.join(", ") : null,
+      cta: "Connect an account", page: "integrations",
+    },
+    {
+      id: "content",
+      title: "Approve your first posts",
+      body: "Your team plans a month of content. Have a read and change anything you don't like.",
+      done: posts.some((p) => p.status === "scheduled" || p.status === "published"),
+      detail: (() => {
+        const n = posts.filter((p) => p.status === "scheduled").length;
+        return n ? n + " scheduled" : null;
+      })(),
+      cta: "See the calendar", page: "social",
+    },
+  ];
+
+  // No website of their own? Then "point us at your website" becomes "we'll
+  // build you one", and the step is satisfied by a published HarperLinks site.
+  if (state.noWebsite) {
+    steps[0] = Object.assign(steps[0], {
+      title: "Get a website built",
+      body: "You told us you haven't got one. Your AI website builder can write and publish you a one-page site.",
+      done: !!(site.publishedAt || profile.configured),
+      detail: site.publishedAt ? "Published" : null,
+      cta: "Build my site",
+    });
+  }
+
+  const done = steps.filter((s) => s.done).length;
+  res.json({
+    ok: true,
+    // the HarperLinks team isn't onboarding itself
+    applies: req.user.role !== "admin",
+    steps,
+    done,
+    total: steps.length,
+    complete: done === steps.length,
+    dismissed: !!state.dismissed,
+    noWebsite: !!state.noWebsite,
+  });
+});
+
+// Only two things the customer can actually set: "I haven't got a website"
+// and "stop showing me this".
+app.post("/api/setup", (req, res) => {
+  const state = store.getCol("setup-state", {});
+  const body = req.body || {};
+  if (body.noWebsite !== undefined) state.noWebsite = !!body.noWebsite;
+  if (body.dismissed !== undefined) state.dismissed = !!body.dismissed;
+  store.saveCol("setup-state", state);
+  res.json({ ok: true, state });
+});
+
 app.get("/api/profile", (_req, res) => res.json(store.getProfile()));
 
 app.get("/api/knowledge", (_req, res) => res.json(store.getKnowledge()));

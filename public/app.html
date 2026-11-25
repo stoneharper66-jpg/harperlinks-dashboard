@@ -60,8 +60,41 @@
 </div>
 <div class="toast-wrap" id="toastWrap"></div>
 
+<div class="buddy-container" id="buddyContainer" hidden>
+  <div class="buddy-bubble" id="buddyBubble">
+    <button class="buddy-dismiss" id="buddyDismiss" aria-label="Dismiss guide">×</button>
+    <div class="buddy-content">
+      <div class="buddy-text" id="buddyText"></div>
+    </div>
+    <div class="buddy-actions" id="buddyActions"></div>
+  </div>
+  <div class="buddy-char" id="buddyChar" aria-label="AI Assistant" role="button" tabindex="0">
+    <div class="buddy-sparkles">
+      <span class="buddy-sparkle"></span>
+      <span class="buddy-sparkle"></span>
+      <span class="buddy-sparkle"></span>
+      <span class="buddy-sparkle"></span>
+      <span class="buddy-sparkle"></span>
+    </div>
+    <div class="buddy-wings"></div>
+    <div class="buddy-body"></div>
+    <div class="buddy-face">
+      <div class="buddy-eyes">
+        <span class="buddy-eye"></span>
+        <span class="buddy-eye"></span>
+      </div>
+      <div class="buddy-cheeks">
+        <span class="buddy-cheek"></span>
+        <span class="buddy-cheek"></span>
+      </div>
+      <div class="buddy-mouth"></div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 <script src="social.js"></script>
+<script src="connector-setup.js"></script>
 <script src="pages.js"></script>
 <script src="assistant.js"></script>
 <script>HL.boot();</script>
