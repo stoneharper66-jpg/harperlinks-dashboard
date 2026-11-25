@@ -631,6 +631,9 @@
     var id = (location.hash || "#/overview").replace(/^#\//, "").split("?")[0] || "overview";
     var page = HL.pages[id] || HL.pages.overview;
     current = id;
+    // lets the stylesheet give each page its own accent wash, so they don't
+    // all read as the same sheet of white
+    document.body.dataset.page = id;
     document.querySelectorAll(".side-link").forEach(function (a) {
       a.classList.toggle("active", a.dataset.page === id);
     });

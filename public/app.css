@@ -2198,3 +2198,149 @@ body{overflow-x:hidden}
 .setup-foot { padding: 10px 2px 0; border-top: 1px solid var(--border); }
 
 @media (max-width: 560px) { .setup-box { right: 12px; left: 12px; width: auto; bottom: 96px; } }
+
+/* =========================================================================
+   SURFACES — depth pass
+   The dashboard was white panels, with white borders, on a near-white page.
+   Nothing read as a box and every screen looked like the same blank sheet.
+   This gives the page a tinted ground, each section its own accent wash,
+   and every box a real edge and a believable light source. Colours and
+   spacing are unchanged — this is depth, not a redesign.
+   ========================================================================= */
+
+:root {
+  --ground: #EEF2F8;                              /* the page, a shade deeper */
+  --surface: linear-gradient(180deg, #FFFFFF 0%, #FCFDFF 100%);
+  --surface-line: rgba(14, 17, 22, .09);
+  --surface-line-strong: rgba(14, 17, 22, .14);
+  /* a believable light source: tight contact shadow, soft ambient, inner lip */
+  --lift-1: 0 1px 2px rgba(14,17,22,.05), 0 2px 6px -2px rgba(14,17,22,.06), inset 0 1px 0 rgba(255,255,255,.9);
+  --lift-2: 0 1px 2px rgba(14,17,22,.06), 0 8px 20px -8px rgba(14,17,22,.14), inset 0 1px 0 rgba(255,255,255,.9);
+  --lift-3: 0 1px 2px rgba(14,17,22,.07), 0 18px 38px -16px rgba(14,17,22,.22), inset 0 1px 0 rgba(255,255,255,.95);
+}
+
+body { background: var(--ground); }
+
+/* The accent wash. Stronger than before so it's actually visible, and it
+   shifts hue with the page you're on. */
+.os-main::after {
+  background:
+    radial-gradient(ellipse 70% 50% at 18% -6%, var(--pg-a, rgba(10,109,216,.16)), transparent 68%),
+    radial-gradient(ellipse 60% 45% at 92% 8%,  var(--pg-b, rgba(216,27,114,.11)), transparent 70%),
+    radial-gradient(ellipse 80% 40% at 50% 104%, rgba(91,75,232,.07), transparent 72%);
+  transition: background .5s var(--ease);
+}
+/* the dot grid, a touch more present against the deeper ground */
+.os-main::before { background-image: radial-gradient(rgba(14,17,22,.05) 1px, transparent 1.4px); }
+
+/* each page its own light */
+body[data-page="overview"]     { --pg-a: rgba(10,109,216,.17); --pg-b: rgba(216,27,114,.12); }
+body[data-page="social"]       { --pg-a: rgba(216,27,114,.15); --pg-b: rgba(123,92,255,.12); }
+body[data-page="website"]      { --pg-a: rgba(239,68,68,.11);  --pg-b: rgba(10,109,216,.13); }
+body[data-page="crm"]          { --pg-a: rgba(245,158,11,.13); --pg-b: rgba(216,27,114,.10); }
+body[data-page="appointments"] { --pg-a: rgba(20,184,166,.14); --pg-b: rgba(10,109,216,.11); }
+body[data-page="analytics"]    { --pg-a: rgba(91,75,232,.15);  --pg-b: rgba(14,165,233,.12); }
+body[data-page="employees"]    { --pg-a: rgba(139,92,246,.15); --pg-b: rgba(216,27,114,.11); }
+body[data-page="integrations"] { --pg-a: rgba(14,165,233,.15); --pg-b: rgba(91,75,232,.11); }
+body[data-page="settings"]     { --pg-a: rgba(85,96,110,.13);  --pg-b: rgba(10,109,216,.10); }
+body[data-page="automations"]  { --pg-a: rgba(245,158,11,.12); --pg-b: rgba(91,75,232,.12); }
+body[data-page="billing"]      { --pg-a: rgba(23,166,115,.13); --pg-b: rgba(10,109,216,.10); }
+
+/* ---- panels ---- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  border-radius: 20px;
+  box-shadow: var(--lift-2);
+}
+.panel:hover { box-shadow: var(--lift-3); border-color: var(--surface-line-strong); }
+/* a hairline under the heading so the head reads as a header */
+.panel-head {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgba(14,17,22,.06);
+  margin-bottom: 2px;
+}
+
+/* ---- stat boxes: they had a WHITE border, so they had no edge at all ---- */
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  border-radius: 16px;
+  box-shadow: var(--lift-1);
+  position: relative;
+  overflow: hidden;
+}
+/* a thin brand rule along the top edge — enough to catch the eye, not shout */
+.stat::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: var(--grad); opacity: .5;
+}
+.stat:hover { transform: translateY(-2px); box-shadow: var(--lift-2); border-color: var(--surface-line-strong); }
+.stat:hover::before { opacity: .9; }
+
+/* ---- list rows read as cards now, not stripes on a sheet ---- */
+.rowlist { gap: 8px; }
+.lrow {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  box-shadow: var(--lift-1);
+}
+.lrow:hover { border-color: var(--surface-line-strong); box-shadow: var(--lift-2); transform: translateY(-1px); }
+
+/* ---- the chrome around it ---- */
+.os-topbar {
+  background: rgba(238,242,248,.82);
+  border-bottom: 1px solid var(--surface-line);
+}
+.os-side {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFE 100%);
+  border-right: 1px solid var(--surface-line);
+}
+
+/* ---- the smaller boxes, same treatment ---- */
+.app-card, .mem-row, .pipe-card, .scan-row, .setup-box, .pick-row {
+  background: var(--surface);
+  border-color: var(--surface-line);
+}
+.app-card { box-shadow: var(--lift-1); }
+.app-card:hover { box-shadow: var(--lift-2); }
+.setup-box { box-shadow: var(--lift-3); }
+
+/* inputs shouldn't be whiter than the cards they sit in */
+.input, .textarea, select.input, .gate-field input {
+  background: #FFFFFF;
+  border-color: var(--surface-line);
+  box-shadow: inset 0 1px 2px rgba(14,17,22,.035);
+}
+.input:focus, .textarea:focus { box-shadow: inset 0 1px 2px rgba(14,17,22,.03), 0 0 0 3px var(--accent-tint); }
+
+@media (prefers-reduced-motion: reduce) { .os-main::after { transition: none; } }
+
+/* ---- the remaining containers, same light source ------------------------- */
+/* Anything that reads as a "box" gets the same treatment, so no page is left
+   looking flatter than the one next to it. */
+.kcol, .ana-card, .emp-card, .empo-hero, .comp-card, .ins-reco,
+.q-card, .wframe, .wbar, .bench-item, .chat-panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  box-shadow: var(--lift-1);
+}
+.kcol:hover, .ana-card:hover, .emp-card:hover, .comp-card:hover {
+  border-color: var(--surface-line-strong);
+  box-shadow: var(--lift-2);
+}
+.chat-panel { box-shadow: var(--lift-2); }
+
+/* the kanban column heading reads as a header, like the panel heads do */
+.kcol-head {
+  background: linear-gradient(180deg, rgba(14,17,22,.035), transparent);
+  border-bottom: 1px solid rgba(14,17,22,.06);
+}
+
+/* calendar cells: give the grid a surface and the days a soft edge */
+.bigcal-grid { background: var(--surface); border: 1px solid var(--surface-line); border-radius: 14px; box-shadow: var(--lift-1); overflow: hidden; }
+.bigcal-day { border-color: rgba(14,17,22,.055); }
+.bigcal-day.has { background: linear-gradient(180deg, var(--accent-tint), transparent 70%); }
+
+/* the empty-state dashes shouldn't be the only thing with an edge */
+.setup-note, .empty-state { background: var(--surface); border-color: var(--surface-line); }
