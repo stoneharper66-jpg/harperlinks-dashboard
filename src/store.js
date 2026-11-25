@@ -35,7 +35,7 @@ const ACCOUNTS_DIR = path.join(ROOT_DIR, "accounts");
   // password resets and customer welcome emails stopped sending with nothing
   // in the UI to explain why. password-resets.json had the same problem,
   // which would invalidate every outstanding reset link on a restart.
-  const GLOBAL = new Set(["users.json", "smtp.json", "password-resets.json", "email-log.json"]);
+  const GLOBAL = new Set(["users.json", "smtp.json", "password-resets.json", "email-log.json", "claims.json"]);
   const legacy = entries.filter((f) => !GLOBAL.has(f));
   if (!legacy.length) return;
   const mainDir = path.join(ACCOUNTS_DIR, tenant.MAIN);

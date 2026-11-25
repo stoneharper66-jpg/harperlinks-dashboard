@@ -6,6 +6,7 @@ const express = require("express");
 
 const engine = require("./src/engine");
 const memory = require("./src/memory");
+const claims = require("./src/claims");
 const notify = require("./src/notify");
 const auth = require("./src/auth");
 const tenant = require("./src/tenant");
@@ -19,6 +20,14 @@ const { ingestWebsite } = ingest;
 const planner = require("./src/planner");
 const budget = require("./src/budget");
 const ghl = require("./src/ghl");
+const stripe = require("./src/stripe");
+const twilio = require("./src/twilio");
+const gcal = require("./src/gcal");
+const videoai = require("./src/videoai");
+const whatsapp = require("./src/whatsapp");
+const shopify = require("./src/shopify");
+const wordpress = require("./src/wordpress");
+const connectorSetup = require("./src/connector-setup");
 const website = require("./src/website");
 const { resolveWhen, formatWhen } = require("./src/tools");
 
@@ -163,6 +172,38 @@ app.post("/api/auth/forgot", async (req, res) => {
     console.error("forgot error:", e.message);
     res.json(same); // never leak whether it worked
   }
+});
+
+// ---- claiming a paid account ------------------------------------------------
+// Paying issues a claim, not an account. These two routes are public on
+// purpose — the token IS the proof of purchase — but they never reveal
+// anything beyond what the buyer already typed into Stripe.
+
+app.get("/api/claim", (req, res) => {
+  const out = claims.find({ token: req.query.token, sessionId: req.query.session });
+  if (!out.ok) return res.status(404).json({ error: out.reason, claimed: !!out.claimed });
+  res.json({ ok: true, claim: claims.publicView(out.claim) });
+});
+
+app.post("/api/claim", (req, res) => {
+  const { token, session, name, password, business } = req.body || {};
+  const out = claims.redeem({ token, sessionId: session, name, password, business });
+  if (!out.ok) return res.status(400).json({ error: out.reason, claimed: !!out.claimed });
+
+  // Sign them straight in — they just proved who they are by paying, and
+  // making them type the password again on a login screen is pure friction.
+  res.setHeader("Set-Cookie", auth.cookieFor(auth.makeToken(out.user.id), req));
+  tenant.run(out.accountId, () => {
+    store.logActivity("auth", `${out.user.email} created their account on the ${out.plan} plan`);
+  });
+  tenant.run(tenant.MAIN, () => {
+    store.logActivity("auth", `🎉 ${out.user.email} claimed their ${out.plan} account ("${out.accountId}")`);
+  });
+  notify.sendToTeam(
+    `✅ ${out.business || out.user.email} is in`,
+    `${out.user.email} just created their HarperLinks account on the ${out.plan} plan.\nAccount id: ${out.accountId}\n\nThey're in the dashboard now.`
+  ).catch(() => {});
+  res.json({ ok: true, user: auth.publicUser(out.user) });
 });
 
 app.post("/api/auth/reset", (req, res) => {
@@ -500,6 +541,567 @@ app.post("/api/accounts/:accountId/ghl", adminOnly, async (req, res) => {
       : `GoHighLevel details saved but not working yet — ${status.reason}`);
     res.json({ ok: true, connected: status.connected, detail: status.connected ? (status.accounts || []).map((a) => a.platform).join(", ") : status.reason });
   });
+});
+
+// ---- Unified Connector Setup (simple + secure) ----------------------------
+// One-click setup for all integrations with encryption and validation
+app.get("/api/connectors", (req, res) => {
+  const list = connectorSetup.list().map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    category: c.category,
+    description: c.description,
+    setupMethod: c.setupMethod,
+    instructions: c.instructions,
+    configured: connectorSetup.isConfigured(c.id),
+  }));
+  res.json(list);
+});
+
+app.get("/api/connectors/:id", (req, res) => {
+  const connector = connectorSetup.getConnector(req.params.id);
+  if (!connector) return res.status(404).json({ error: "Unknown connector" });
+  res.json({
+    ...connector,
+    configured: connectorSetup.isConfigured(req.params.id),
+  });
+});
+
+app.post("/api/connectors/:id/setup", async (req, res) => {
+  try {
+    const { config } = req.body || {};
+    if (!config) return res.status(400).json({ error: "config required" });
+
+    // Test before saving
+    const test = await connectorSetup.testConnectorConfig(req.params.id, config);
+    if (!test.ok) return res.status(400).json({ error: test.error || "Test failed" });
+
+    // Save securely (encrypted)
+    connectorSetup.saveConnectorConfig(req.params.id, config);
+    res.json({ ok: true, message: "Connected successfully" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.delete("/api/connectors/:id", (req, res) => {
+  try {
+    connectorSetup.removeConnectorConfig(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/connectors/:id/oauth-url", (req, res) => {
+  try {
+    const url = connectorSetup.getOAuthUrl(req.params.id, req.user?.id);
+    res.json({ url });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- Stripe billing --------------------------------------------------------
+app.get("/api/stripe/health", async (req, res) => {
+  try {
+    const status = await stripe.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/stripe/products", async (req, res) => {
+  try {
+    const products = await stripe.listProducts();
+    res.json(products);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/stripe/prices/:productId", async (req, res) => {
+  try {
+    const prices = await stripe.listPrices(req.params.productId);
+    res.json(prices);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/stripe/subscription/:customerId", async (req, res) => {
+  try {
+    const sub = await stripe.getSubscription(req.params.customerId);
+    res.json(sub || { status: "none" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/stripe/payment-link", async (req, res) => {
+  try {
+    const { prices } = req.body || {};
+    if (!prices || !Array.isArray(prices)) {
+      return res.status(400).json({ error: "prices array required" });
+    }
+    const link = await stripe.createPaymentLink(prices);
+    stripe.savePaymentLinks(Object.assign(stripe.getPaymentLinks(), {
+      [prices[0]]: link.url,
+    }));
+    res.json(link);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- Twilio voice and SMS --------------------------------------------------
+app.get("/api/twilio/health", async (req, res) => {
+  try {
+    const status = await twilio.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/twilio/numbers", async (req, res) => {
+  try {
+    const numbers = await twilio.listPhoneNumbers();
+    res.json(numbers);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/twilio/sms", async (req, res) => {
+  try {
+    const { to, message } = req.body || {};
+    if (!to || !message) return res.status(400).json({ error: "to and message required" });
+    const result = await twilio.sendSMS(to, message);
+    store.logActivity("sms", `SMS sent to ${to}`);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/twilio/messages", async (req, res) => {
+  try {
+    const messages = await twilio.listMessages();
+    res.json(messages);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/twilio/call", async (req, res) => {
+  try {
+    const { to } = req.body || {};
+    if (!to) return res.status(400).json({ error: "to number required" });
+    const result = await twilio.makeCall(to);
+    store.logActivity("call", `Call made to ${to}`);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Webhooks from Twilio (inbound calls/SMS)
+app.post("/api/webhooks/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    await twilio.handleSmsWebhook(req.body);
+    res.type("text/xml").send('<Response></Response>');
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/webhooks/twilio/call", express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    await twilio.handleCallWebhook(req.body);
+    res.type("text/xml").send('<Response></Response>');
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- Google Calendar -------------------------------------------------------
+app.get("/api/gcal/health", async (req, res) => {
+  try {
+    const status = await gcal.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/gcal/auth-url", (req, res) => {
+  try {
+    const url = gcal.getAuthUrl(req.user.id);
+    res.json({ url });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/gcal/callback", async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return res.status(400).json({ error: "Authorization code required." });
+    const tokens = await gcal.exchangeCode(code);
+    gcal.saveToken(tokens);
+    store.logActivity("integration", "Google Calendar connected");
+    res.json({ ok: true, authenticated: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/gcal/calendar", async (req, res) => {
+  try {
+    const token = gcal.getToken();
+    if (!token) return res.status(401).json({ error: "Not authenticated with Google Calendar." });
+    const calendar = await gcal.getPrimaryCalendar(token.access_token);
+    res.json(calendar);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/gcal/events", async (req, res) => {
+  try {
+    const token = gcal.getToken();
+    if (!token) return res.status(401).json({ error: "Not authenticated." });
+    const { startTime, endTime } = req.query;
+    const cal = await gcal.getPrimaryCalendar(token.access_token);
+    const events = await gcal.listEvents(cal.id, {
+      startTime: startTime || new Date().toISOString(),
+      endTime: endTime || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      accessToken: token.access_token,
+    });
+    res.json(events);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/gcal/events", async (req, res) => {
+  try {
+    const token = gcal.getToken();
+    if (!token) return res.status(401).json({ error: "Not authenticated." });
+    const { title, description, startTime, endTime, attendees } = req.body || {};
+    if (!title || !startTime || !endTime) return res.status(400).json({ error: "title, startTime, endTime required." });
+    const cal = await gcal.getPrimaryCalendar(token.access_token);
+    const event = await gcal.createEvent(cal.id, {
+      title, description, startTime, endTime, attendees,
+      accessToken: token.access_token,
+    });
+    store.logActivity("calendar", `Event created: ${title}`);
+    res.json(event);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/gcal/availability", async (req, res) => {
+  try {
+    const token = gcal.getToken();
+    if (!token) return res.status(401).json({ error: "Not authenticated." });
+    const { startTime, endTime } = req.query;
+    if (!startTime || !endTime) return res.status(400).json({ error: "startTime and endTime required." });
+    const cal = await gcal.getPrimaryCalendar(token.access_token);
+    const availability = await gcal.checkAvailability(cal.id, { startTime, endTime, accessToken: token.access_token });
+    res.json(availability);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- Video AI ---------------------------------------------------------------
+app.get("/api/videoai/health", async (req, res) => {
+  try {
+    const status = await videoai.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/videoai/generate", async (req, res) => {
+  try {
+    const { script, shotList, music, voiceOver, options } = req.body || {};
+    if (!script) return res.status(400).json({ error: "script required" });
+    const job = await videoai.generateVideo(script, { shotList, music, voiceOver, options });
+    res.json(job);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/videoai/jobs/:jobId", async (req, res) => {
+  try {
+    const status = await videoai.getVideoStatus(req.params.jobId);
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/videoai/jobs", async (req, res) => {
+  try {
+    const { status } = req.query;
+    const jobs = videoai.listJobs(status);
+    res.json(jobs);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Webhook from video AI provider
+app.post("/api/webhooks/videoai/status", express.json(), async (req, res) => {
+  try {
+    await videoai.handleStatusWebhook(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- WhatsApp Business -----------------------------------------------------
+app.get("/api/whatsapp/health", async (req, res) => {
+  try {
+    const status = await whatsapp.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/whatsapp/send", async (req, res) => {
+  try {
+    const { to, message, templateName, parameters } = req.body || {};
+    if (!to) return res.status(400).json({ error: "to number required" });
+    const result = await whatsapp.sendMessage(to, { message, templateName, parameters });
+    store.logActivity("whatsapp", `Message sent to ${to}`);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/whatsapp/templates", async (req, res) => {
+  try {
+    const templates = await whatsapp.listTemplates();
+    res.json(templates);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/whatsapp/messages", async (req, res) => {
+  try {
+    const messages = whatsapp.listMessages();
+    res.json(messages);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/whatsapp/contacts", async (req, res) => {
+  try {
+    const contacts = whatsapp.getContacts();
+    res.json(contacts);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Webhook from WhatsApp for incoming messages
+app.post("/api/webhooks/whatsapp/messages", express.json(), async (req, res) => {
+  try {
+    await whatsapp.handleMessageWebhook(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- Shopify ---------------------------------------------------------------
+app.get("/api/shopify/health", async (req, res) => {
+  try {
+    const status = await shopify.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/shop", async (req, res) => {
+  try {
+    const shop = await shopify.getShop();
+    res.json(shop);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/products", async (req, res) => {
+  try {
+    const { limit, status } = req.query;
+    const products = await shopify.listProducts({ limit: parseInt(limit) || 50, status: status || "active" });
+    res.json(products);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/products/:productId", async (req, res) => {
+  try {
+    const product = await shopify.getProduct(req.params.productId);
+    res.json(product);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/orders", async (req, res) => {
+  try {
+    const { limit, status } = req.query;
+    const orders = await shopify.listOrders({ limit: parseInt(limit) || 50, status: status || "any" });
+    res.json(orders);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/customers", async (req, res) => {
+  try {
+    const { limit } = req.query;
+    const customers = await shopify.listCustomers({ limit: parseInt(limit) || 50 });
+    res.json(customers);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/shopify/analytics", async (req, res) => {
+  try {
+    const analytics = await shopify.getAnalytics();
+    res.json(analytics);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/shopify/sync", async (req, res) => {
+  try {
+    const count = await shopify.syncProducts();
+    store.logActivity("integration", `Shopify products synced: ${count} products`);
+    res.json({ ok: true, synced: count });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---- WordPress ----------------------------------------------------------
+app.get("/api/wordpress/health", async (req, res) => {
+  try {
+    const status = await wordpress.health();
+    res.json(status);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/site", async (req, res) => {
+  try {
+    const site = await wordpress.getSite();
+    res.json(site);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/posts", async (req, res) => {
+  try {
+    const { limit, status } = req.query;
+    const posts = await wordpress.listPosts({ limit: parseInt(limit) || 10, status: status || "publish" });
+    res.json(posts);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/posts/:postId", async (req, res) => {
+  try {
+    const post = await wordpress.getPost(req.params.postId);
+    res.json(post);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/wordpress/posts", async (req, res) => {
+  try {
+    const { title, content, excerpt, status, categories, tags } = req.body || {};
+    if (!title || !content) return res.status(400).json({ error: "title and content required" });
+    const post = await wordpress.createPost({ title, content, excerpt, status: status || "draft", categories, tags });
+    store.logActivity("wordpress", `Post published: ${title}`);
+    res.json(post);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.patch("/api/wordpress/posts/:postId", async (req, res) => {
+  try {
+    const { title, content, excerpt, status, categories, tags } = req.body || {};
+    const post = await wordpress.updatePost(req.params.postId, { title, content, excerpt, status, categories, tags });
+    store.logActivity("wordpress", `Post updated: ${title || "unknown"}`);
+    res.json(post);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.delete("/api/wordpress/posts/:postId", async (req, res) => {
+  try {
+    await wordpress.deletePost(req.params.postId);
+    store.logActivity("wordpress", `Post deleted`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/pages", async (req, res) => {
+  try {
+    const { limit } = req.query;
+    const pages = await wordpress.listPages({ limit: parseInt(limit) || 10 });
+    res.json(pages);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/categories", async (req, res) => {
+  try {
+    const categories = await wordpress.getCategories();
+    res.json(categories);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/wordpress/tags", async (req, res) => {
+  try {
+    const tags = await wordpress.getTags();
+    res.json(tags);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ---- chat sessions ----------------------------------------------------------
@@ -1111,13 +1713,62 @@ app.get("/api/integrations", async (_req, res) => {
       how: "Set up in Settings → Email.",
     },
     soon("twitter", "X (Twitter)", "Posts to X.", "Not available at all — our publishing engine dropped X support in December 2024. We won't pretend otherwise."),
-    soon("gcal", "Google Calendar", "Two-way appointment sync.", "Coming soon — appointments work inside HarperLinks today."),
-    soon("stripe", "Stripe", "Subscriptions & billing.", "Coming soon."),
-    soon("twilio", "Twilio", "AI phone calls & SMS.", "Coming soon — powers Harper, your AI receptionist."),
-    soon("videoai", "Video AI", "Turns video scripts into filmed footage.", "Coming soon — scripts, shot lists and slideshow videos already work today."),
-    soon("whatsapp", "WhatsApp Business", "Customer messaging.", "Coming soon."),
-    soon("shopify", "Shopify", "Store data & customers.", "Coming soon."),
-    soon("wordpress", "WordPress", "Push website edits live.", "Coming soon."),
+    {
+      id: "gcal", name: "Google Calendar", desc: "Two-way appointment sync.",
+      group: "calendar", connectable: gcal.isConfigured(), connected: !!gcal.getToken(),
+      detail: gcal.getToken() ? "Connected — syncing with your calendar" : undefined,
+      how: gcal.isConfigured()
+        ? (gcal.getToken() ? "Connected to your Google Calendar for two-way sync." : "Click Connect to authorize.")
+        : "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in your environment.",
+    },
+    {
+      id: "stripe", name: "Stripe", desc: "Subscriptions & billing.",
+      group: "billing", connectable: false, connected: stripe.isConfigured(),
+      detail: stripe.isConfigured() ? "Connected — billing is live" : undefined,
+      how: stripe.isConfigured()
+        ? "Connected to Stripe. Customers can purchase plans from the marketing site."
+        : "Set STRIPE_SECRET_KEY in your environment to enable billing.",
+    },
+    {
+      id: "twilio", name: "Twilio", desc: "AI phone calls & SMS.",
+      group: "communication", connectable: false, connected: twilio.isConfigured(),
+      detail: twilio.isConfigured() ? "Connected — phone and SMS active" : undefined,
+      how: twilio.isConfigured()
+        ? "Connected to Twilio. Harper can receive calls and send SMS messages."
+        : "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in your environment to enable phone and SMS.",
+    },
+    {
+      id: "videoai", name: "Video AI", desc: "Turns video scripts into filmed footage.",
+      group: "media", connectable: false, connected: videoai.isConfigured(),
+      detail: videoai.isConfigured() ? "Connected — rendering videos" : undefined,
+      how: videoai.isConfigured()
+        ? "Connected to your video AI provider. Scripts can now be rendered into videos."
+        : "Set VIDEO_AI_API_KEY and VIDEO_AI_PROVIDER in your environment to enable video rendering.",
+    },
+    {
+      id: "whatsapp", name: "WhatsApp Business", desc: "Customer messaging.",
+      group: "communication", connectable: false, connected: whatsapp.isConfigured(),
+      detail: whatsapp.isConfigured() ? "Connected — messaging active" : undefined,
+      how: whatsapp.isConfigured()
+        ? "Connected to WhatsApp Business. Messages can be sent and received."
+        : "Set WHATSAPP_BUSINESS_ACCOUNT_ID, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_BUSINESS_API_TOKEN in your environment.",
+    },
+    {
+      id: "shopify", name: "Shopify", desc: "Store data & customers.",
+      group: "ecommerce", connectable: false, connected: shopify.isConfigured(),
+      detail: shopify.isConfigured() ? "Connected — syncing store data" : undefined,
+      how: shopify.isConfigured()
+        ? "Connected to your Shopify store. Product and customer data is available."
+        : "Set SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN in your environment.",
+    },
+    {
+      id: "wordpress", name: "WordPress", desc: "Push website edits live.",
+      group: "website", connectable: false, connected: wordpress.isConfigured(),
+      detail: wordpress.isConfigured() ? "Connected — publishing to your site" : undefined,
+      how: wordpress.isConfigured()
+        ? "Connected to your WordPress site. Posts and pages can be published directly."
+        : "Set WORDPRESS_SITE_URL, WORDPRESS_USERNAME, and WORDPRESS_API_TOKEN in your environment.",
+    },
   ]);
 });
 
@@ -1285,6 +1936,16 @@ app.post("/api/media/video", async (req, res) => {
 
 // The one fast path for Stone: where to open this account's publishing engine
 // to link socials. Admin-only — customers never see the engine.
+// Purchases nobody has claimed yet — so the team can chase, or hand over the
+// link by WhatsApp when email isn't sending.
+app.get("/api/claims/pending", adminOnly, (_req, res) => res.json({ ok: true, claims: claims.pending() }));
+
+app.post("/api/claims/:id/link", adminOnly, (req, res) => {
+  const out = claims.reissue(req.params.id);
+  if (!out) return res.status(404).json({ error: "No open claim with that id." });
+  res.json({ ok: true, link: claims.linkFor(out.token, `${req.protocol}://${req.get("host")}`), email: out.claim.email });
+});
+
 app.get("/api/ghl/connect-info", adminOnly, (req, res) => {
   const info = ghl.connectInfo();
   if (!info.locationId) return res.json({ configured: false });
