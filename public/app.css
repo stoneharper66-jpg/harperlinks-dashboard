@@ -2344,3 +2344,135 @@ body[data-page="billing"]      { --pg-a: rgba(23,166,115,.13); --pg-b: rgba(10,1
 
 /* the empty-state dashes shouldn't be the only thing with an edge */
 .setup-note, .empty-state { background: var(--surface); border-color: var(--surface-line); }
+
+/* ---- Command Centre: let it scroll when the window is short -------------- */
+/* `.cc:not(.engaged)` centres the hero with height:100% + justify-content:
+   center. That's fine while it fits, but once the content is taller than the
+   window, flex centring pushes the top ABOVE the scroll origin — so the logo
+   and greeting sat behind the topbar and no amount of scrolling reached them.
+   `safe center` centres only while there's room and falls back to flex-start
+   when there isn't; min-height replaces the fixed height so the box can grow
+   past the viewport and actually produce scrollback. */
+.cc:not(.engaged) {
+  height: auto;
+  min-height: 100%;
+  justify-content: safe center;
+}
+/* older engines that don't understand `safe` get the same protection the
+   long way round: never centre once it's taller than the viewport */
+@media (max-height: 760px) {
+  .cc:not(.engaged) { justify-content: flex-start; padding-top: 18px; }
+}
+
+/* ---- AI Team cards: glass ------------------------------------------------ */
+/* Frosted rather than solid, so the page's accent wash shows through and the
+   cards read as panes of glass sitting over it. The fade is a soft highlight
+   running off the top-left corner, like light catching an edge. */
+.emp-card {
+  position: relative;
+  background: linear-gradient(150deg, rgba(255,255,255,.78) 0%, rgba(255,255,255,.52) 46%, rgba(255,255,255,.38) 100%);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 -1px 0 rgba(14,17,22,.03) inset,
+    0 10px 30px -12px rgba(14,17,22,.18);
+  overflow: hidden;
+  transition: transform .3s var(--ease-out), box-shadow .3s, border-color .3s;
+}
+/* the catch of light across the top-left */
+.emp-card::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(140deg, rgba(255,255,255,.75) 0%, rgba(255,255,255,.12) 34%, transparent 58%);
+  opacity: .85;
+}
+/* and a faint tint of the page's own accent, so the glass picks up the room */
+.emp-card::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse 90% 70% at 85% 110%, var(--pg-a, rgba(10,109,216,.16)), transparent 70%);
+  opacity: .5;
+}
+.emp-card > * { position: relative; z-index: 1; }
+
+.emp-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255,255,255,.9);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.95) inset,
+    0 -1px 0 rgba(14,17,22,.03) inset,
+    0 20px 44px -16px rgba(14,17,22,.26);
+}
+
+/* the chips and the mode select need to sit on glass, not on white */
+.emp-card .emp-cap,
+.emp-card .select,
+.emp-card select {
+  background: rgba(255,255,255,.55);
+  border-color: rgba(255,255,255,.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.emp-card .btn.ghost {
+  background: rgba(255,255,255,.6);
+  border-color: rgba(255,255,255,.8);
+}
+
+/* Safari/Firefox without backdrop-filter would show near-transparent cards
+   with nothing behind them — fall back to a solid-enough surface. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .emp-card { background: linear-gradient(150deg, #FFFFFF, #FAFCFF); border-color: var(--surface-line); }
+}
+
+/* ---- the robot carries the to-do list ------------------------------------ */
+/* A count on his shoulder; tap it and the list opens beside him, wherever
+   you've dragged him to. */
+.fab-todo {
+  position: absolute; top: -2px; right: -4px; z-index: 2;
+  min-width: 19px; height: 19px; padding: 0 5px;
+  border-radius: 99px; border: 2px solid var(--panel);
+  background: var(--accent2); color: #fff;
+  font: 700 11px/15px var(--head); text-align: center;
+  cursor: pointer; box-shadow: 0 2px 6px rgba(216,27,114,.45);
+  animation: todoPop .4s var(--ease-out) both;
+}
+.fab-todo:hover { transform: scale(1.12); }
+@keyframes todoPop { from { transform: scale(0); } to { transform: scale(1); } }
+
+.fab-todo-panel {
+  position: fixed; z-index: 1210; width: min(320px, calc(100vw - 24px));
+  max-height: min(60vh, 460px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--surface-line);
+  border-radius: 16px; padding: 12px 14px 14px;
+  box-shadow: var(--lift-3);
+  animation: todoIn .28s var(--ease-out) both;
+}
+@keyframes todoIn { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+.fab-todo-panel[hidden] { display: none; }
+
+.fts-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.fts-head b { font-size: 14px; }
+.fts-head span { font-size: 11.5px; color: var(--muted); }
+.fts-x {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  font-size: 17px; line-height: 1; color: var(--muted); padding: 0 2px;
+}
+.fts-x:hover { color: var(--text); }
+
+.fts-step { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); }
+.fts-tick {
+  flex: 0 0 auto; width: 17px; height: 17px; border-radius: 99px; margin-top: 2px;
+  border: 1.5px solid var(--border); color: #fff;
+  font-size: 10px; line-height: 14px; text-align: center; font-weight: 700;
+}
+.fts-step.done .fts-tick { background: var(--ok); border-color: var(--ok); }
+.fts-step.done .fts-t { color: var(--muted); text-decoration: line-through; }
+.fts-t { font-size: 13px; font-weight: 600; }
+.fts-b { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+.fts-step .btn { margin-top: 8px; }
+.fts-alt {
+  display: block; margin-top: 8px; background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--muted); text-decoration: underline;
+}
+.fts-alt:hover { color: var(--accent); }

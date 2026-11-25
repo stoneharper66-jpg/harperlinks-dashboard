@@ -641,6 +641,108 @@
       say: function (text) { status(text); },
     };
 
+    /* ---------- the setup checklist, carried by the robot ----------
+       It used to float in its own box in the corner. Stone wanted it to
+       come from the robot, so now the robot wears a badge with how many
+       steps are left, and tapping that badge opens the list beside him —
+       wherever he happens to be standing. Every tick still comes from real
+       account state on the server. */
+    var setupPanel = null, setupData = null;
+
+    var badge = HL.el("span", "fab-todo");
+    badge.hidden = true;
+    badge.title = "Finish setting up";
+    fab.appendChild(badge);
+
+    function placeSetup() {
+      if (!setupPanel || setupPanel.hidden) return;
+      var f = fab.getBoundingClientRect();
+      var w = setupPanel.offsetWidth || 320, h = setupPanel.offsetHeight || 300, GAP = 12, EDGE = 10;
+      var left = f.left + f.width / 2 - w / 2;
+      setupPanel.style.left = Math.min(Math.max(EDGE, left), window.innerWidth - w - EDGE) + "px";
+      var above = f.top - GAP - h;
+      setupPanel.style.top = (above > EDGE ? above : Math.min(f.bottom + GAP, window.innerHeight - h - EDGE)) + "px";
+    }
+
+    function drawSetup() {
+      if (!setupPanel || !setupData) return;
+      var d = setupData;
+      setupPanel.innerHTML = "";
+      var head = HL.el("div", "fts-head");
+      head.innerHTML = '<b>Finish setting up</b><span>' + d.done + ' of ' + d.total + ' done</span>';
+      var x = HL.el("button", "fts-x", "×");
+      x.addEventListener("click", function () { setupPanel.hidden = true; });
+      head.appendChild(x);
+      setupPanel.appendChild(head);
+
+      d.steps.forEach(function (st) {
+        var row = HL.el("div", "fts-step" + (st.done ? " done" : ""));
+        row.innerHTML = '<span class="fts-tick">' + (st.done ? "✓" : "") + "</span>";
+        var mid = HL.el("div");
+        mid.appendChild(HL.el("div", "fts-t", st.title));
+        mid.appendChild(HL.el("div", "fts-b", st.detail || st.body));
+        if (!st.done) {
+          var go = HL.el("button", "btn sm", st.cta);
+          go.addEventListener("click", function () {
+            setupPanel.hidden = true;
+            HL.buddy.goToPage(st.page, st.cta);
+          });
+          mid.appendChild(go);
+          if (st.id === "website" && !d.noWebsite) {
+            var no = HL.el("button", "fts-alt", "I haven't got a website");
+            no.addEventListener("click", function () {
+              HL.post("/api/setup", { noWebsite: true }).then(loadSetup);
+            });
+            mid.appendChild(no);
+          }
+        }
+        row.appendChild(mid);
+        setupPanel.appendChild(row);
+      });
+
+      var hide = HL.el("button", "fts-alt", "Don't show this again");
+      hide.addEventListener("click", function () {
+        HL.post("/api/setup", { dismissed: true }).then(function () {
+          setupPanel.hidden = true; badge.hidden = true;
+        });
+      });
+      setupPanel.appendChild(hide);
+      placeSetup();
+    }
+
+    function loadSetup() {
+      return HL.api("/api/setup").then(function (d) {
+        setupData = d;
+        var left = d && d.ok ? d.total - d.done : 0;
+        if (!d || !d.ok || !d.applies || d.dismissed || d.complete || !left) {
+          badge.hidden = true;
+          if (setupPanel) setupPanel.hidden = true;
+          return;
+        }
+        badge.hidden = false;
+        badge.textContent = left;
+        if (setupPanel && !setupPanel.hidden) drawSetup();
+      }).catch(function () { badge.hidden = true; });
+    }
+
+    badge.addEventListener("click", function (e) {
+      e.stopPropagation();          // don't also open the chat
+      if (!setupPanel) {
+        setupPanel = HL.el("div", "fab-todo-panel");
+        // start hidden, or the toggle below closes it the moment it's made
+        setupPanel.hidden = true;
+        document.body.appendChild(setupPanel);
+      }
+      setupPanel.hidden = !setupPanel.hidden;
+      if (!setupPanel.hidden) drawSetup();
+    });
+
+    HL.refreshSetup = loadSetup;
+    loadSetup();
+    window.addEventListener("hashchange", function () { setTimeout(loadSetup, 900); });
+    // the panel follows him around
+    setInterval(placeSetup, 150);
+
     /* ---------- open / close ---------- */
     var greeted = false;
     function toggle() {
