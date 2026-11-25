@@ -13,6 +13,7 @@
 //     what the crawl actually read.
 
 const store = require("./store");
+const charge = require("./credits/charge");
 const media = require("./media");
 const employees = require("./employees");
 const budget = require("./budget");
@@ -82,6 +83,13 @@ Rules:
 - Do not promise anything the business hasn't said it does.`;
 
 async function writeMonth(profile, count) {
+  // The spec prices a week of content (7 posts) at 30 credits, so a month is
+  // billed as however many weeks it actually covers — rounded up.
+  const weeks = Math.max(1, Math.ceil((Number(count) || 0) / 7));
+  for (let w = 0; w < weeks; w++) {
+    const billed = await charge.run("social.week_plan", { refId: `plan-week-${w}` }, async () => true);
+    if (!billed.ok) return [];   // out of credits: plan nothing rather than half a month
+  }
   if (!HAS_KEY) return templateMonth(profile, count);
   const Anthropic = require("@anthropic-ai/sdk");
   const client = new Anthropic();
