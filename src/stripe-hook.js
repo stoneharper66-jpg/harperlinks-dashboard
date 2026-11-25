@@ -199,7 +199,6 @@ Once they're in:
   });
 
   return { ok: true, claimId: claim.id, plan, emailed: welcome.sent };
-  return { ok: true, accountId, plan, welcomed: welcome.sent };
 }
 
 async function handle(rawBody, signature, secret) {

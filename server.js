@@ -174,6 +174,48 @@ app.post("/api/auth/forgot", async (req, res) => {
   }
 });
 
+
+// ---- inbound provider webhooks ----------------------------------------------
+// Registered BEFORE the signed-in gate on purpose: Twilio and Meta call these
+// from their own servers with no session cookie, so behind the gate they'd
+// only ever collect 401s. Each handler must verify the caller itself.
+
+app.post("/api/webhooks/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    await twilio.handleSmsWebhook(req.body);
+    res.type("text/xml").send('<Response></Response>');
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/webhooks/twilio/call", express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    await twilio.handleCallWebhook(req.body);
+    res.type("text/xml").send('<Response></Response>');
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/webhooks/videoai/status", express.json(), async (req, res) => {
+  try {
+    await videoai.handleStatusWebhook(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/webhooks/whatsapp/messages", express.json(), async (req, res) => {
+  try {
+    await whatsapp.handleMessageWebhook(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ---- claiming a paid account ------------------------------------------------
 // Paying issues a claim, not an account. These two routes are public on
 // purpose — the token IS the proof of purchase — but they never reveal
@@ -604,7 +646,7 @@ app.get("/api/connectors/:id/oauth-url", (req, res) => {
 });
 
 // ---- Stripe billing --------------------------------------------------------
-app.get("/api/stripe/health", async (req, res) => {
+app.get("/api/stripe/health", adminOnly, async (req, res) => {
   try {
     const status = await stripe.health();
     res.json(status);
@@ -613,7 +655,7 @@ app.get("/api/stripe/health", async (req, res) => {
   }
 });
 
-app.get("/api/stripe/products", async (req, res) => {
+app.get("/api/stripe/products", adminOnly, async (req, res) => {
   try {
     const products = await stripe.listProducts();
     res.json(products);
@@ -622,7 +664,7 @@ app.get("/api/stripe/products", async (req, res) => {
   }
 });
 
-app.get("/api/stripe/prices/:productId", async (req, res) => {
+app.get("/api/stripe/prices/:productId", adminOnly, async (req, res) => {
   try {
     const prices = await stripe.listPrices(req.params.productId);
     res.json(prices);
@@ -631,7 +673,7 @@ app.get("/api/stripe/prices/:productId", async (req, res) => {
   }
 });
 
-app.get("/api/stripe/subscription/:customerId", async (req, res) => {
+app.get("/api/stripe/subscription/:customerId", adminOnly, async (req, res) => {
   try {
     const sub = await stripe.getSubscription(req.params.customerId);
     res.json(sub || { status: "none" });
@@ -640,7 +682,7 @@ app.get("/api/stripe/subscription/:customerId", async (req, res) => {
   }
 });
 
-app.post("/api/stripe/payment-link", async (req, res) => {
+app.post("/api/stripe/payment-link", adminOnly, async (req, res) => {
   try {
     const { prices } = req.body || {};
     if (!prices || !Array.isArray(prices)) {
@@ -657,7 +699,7 @@ app.post("/api/stripe/payment-link", async (req, res) => {
 });
 
 // ---- Twilio voice and SMS --------------------------------------------------
-app.get("/api/twilio/health", async (req, res) => {
+app.get("/api/twilio/health", adminOnly, async (req, res) => {
   try {
     const status = await twilio.health();
     res.json(status);
@@ -666,7 +708,7 @@ app.get("/api/twilio/health", async (req, res) => {
   }
 });
 
-app.get("/api/twilio/numbers", async (req, res) => {
+app.get("/api/twilio/numbers", adminOnly, async (req, res) => {
   try {
     const numbers = await twilio.listPhoneNumbers();
     res.json(numbers);
@@ -675,7 +717,7 @@ app.get("/api/twilio/numbers", async (req, res) => {
   }
 });
 
-app.post("/api/twilio/sms", async (req, res) => {
+app.post("/api/twilio/sms", adminOnly, async (req, res) => {
   try {
     const { to, message } = req.body || {};
     if (!to || !message) return res.status(400).json({ error: "to and message required" });
@@ -687,7 +729,7 @@ app.post("/api/twilio/sms", async (req, res) => {
   }
 });
 
-app.get("/api/twilio/messages", async (req, res) => {
+app.get("/api/twilio/messages", adminOnly, async (req, res) => {
   try {
     const messages = await twilio.listMessages();
     res.json(messages);
@@ -696,7 +738,7 @@ app.get("/api/twilio/messages", async (req, res) => {
   }
 });
 
-app.post("/api/twilio/call", async (req, res) => {
+app.post("/api/twilio/call", adminOnly, async (req, res) => {
   try {
     const { to } = req.body || {};
     if (!to) return res.status(400).json({ error: "to number required" });
@@ -709,26 +751,10 @@ app.post("/api/twilio/call", async (req, res) => {
 });
 
 // Webhooks from Twilio (inbound calls/SMS)
-app.post("/api/webhooks/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    await twilio.handleSmsWebhook(req.body);
-    res.type("text/xml").send('<Response></Response>');
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
-app.post("/api/webhooks/twilio/call", express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    await twilio.handleCallWebhook(req.body);
-    res.type("text/xml").send('<Response></Response>');
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
 // ---- Google Calendar -------------------------------------------------------
-app.get("/api/gcal/health", async (req, res) => {
+app.get("/api/gcal/health", adminOnly, async (req, res) => {
   try {
     const status = await gcal.health();
     res.json(status);
@@ -737,7 +763,7 @@ app.get("/api/gcal/health", async (req, res) => {
   }
 });
 
-app.get("/api/gcal/auth-url", (req, res) => {
+app.get("/api/gcal/auth-url", adminOnly, (req, res) => {
   try {
     const url = gcal.getAuthUrl(req.user.id);
     res.json({ url });
@@ -746,7 +772,7 @@ app.get("/api/gcal/auth-url", (req, res) => {
   }
 });
 
-app.get("/api/gcal/callback", async (req, res) => {
+app.get("/api/gcal/callback", adminOnly, async (req, res) => {
   try {
     const { code } = req.query;
     if (!code) return res.status(400).json({ error: "Authorization code required." });
@@ -759,7 +785,7 @@ app.get("/api/gcal/callback", async (req, res) => {
   }
 });
 
-app.get("/api/gcal/calendar", async (req, res) => {
+app.get("/api/gcal/calendar", adminOnly, async (req, res) => {
   try {
     const token = gcal.getToken();
     if (!token) return res.status(401).json({ error: "Not authenticated with Google Calendar." });
@@ -770,7 +796,7 @@ app.get("/api/gcal/calendar", async (req, res) => {
   }
 });
 
-app.get("/api/gcal/events", async (req, res) => {
+app.get("/api/gcal/events", adminOnly, async (req, res) => {
   try {
     const token = gcal.getToken();
     if (!token) return res.status(401).json({ error: "Not authenticated." });
@@ -787,7 +813,7 @@ app.get("/api/gcal/events", async (req, res) => {
   }
 });
 
-app.post("/api/gcal/events", async (req, res) => {
+app.post("/api/gcal/events", adminOnly, async (req, res) => {
   try {
     const token = gcal.getToken();
     if (!token) return res.status(401).json({ error: "Not authenticated." });
@@ -805,7 +831,7 @@ app.post("/api/gcal/events", async (req, res) => {
   }
 });
 
-app.get("/api/gcal/availability", async (req, res) => {
+app.get("/api/gcal/availability", adminOnly, async (req, res) => {
   try {
     const token = gcal.getToken();
     if (!token) return res.status(401).json({ error: "Not authenticated." });
@@ -820,7 +846,7 @@ app.get("/api/gcal/availability", async (req, res) => {
 });
 
 // ---- Video AI ---------------------------------------------------------------
-app.get("/api/videoai/health", async (req, res) => {
+app.get("/api/videoai/health", adminOnly, async (req, res) => {
   try {
     const status = await videoai.health();
     res.json(status);
@@ -829,7 +855,7 @@ app.get("/api/videoai/health", async (req, res) => {
   }
 });
 
-app.post("/api/videoai/generate", async (req, res) => {
+app.post("/api/videoai/generate", adminOnly, async (req, res) => {
   try {
     const { script, shotList, music, voiceOver, options } = req.body || {};
     if (!script) return res.status(400).json({ error: "script required" });
@@ -840,7 +866,7 @@ app.post("/api/videoai/generate", async (req, res) => {
   }
 });
 
-app.get("/api/videoai/jobs/:jobId", async (req, res) => {
+app.get("/api/videoai/jobs/:jobId", adminOnly, async (req, res) => {
   try {
     const status = await videoai.getVideoStatus(req.params.jobId);
     res.json(status);
@@ -849,7 +875,7 @@ app.get("/api/videoai/jobs/:jobId", async (req, res) => {
   }
 });
 
-app.get("/api/videoai/jobs", async (req, res) => {
+app.get("/api/videoai/jobs", adminOnly, async (req, res) => {
   try {
     const { status } = req.query;
     const jobs = videoai.listJobs(status);
@@ -860,17 +886,9 @@ app.get("/api/videoai/jobs", async (req, res) => {
 });
 
 // Webhook from video AI provider
-app.post("/api/webhooks/videoai/status", express.json(), async (req, res) => {
-  try {
-    await videoai.handleStatusWebhook(req.body);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
 // ---- WhatsApp Business -----------------------------------------------------
-app.get("/api/whatsapp/health", async (req, res) => {
+app.get("/api/whatsapp/health", adminOnly, async (req, res) => {
   try {
     const status = await whatsapp.health();
     res.json(status);
@@ -879,7 +897,7 @@ app.get("/api/whatsapp/health", async (req, res) => {
   }
 });
 
-app.post("/api/whatsapp/send", async (req, res) => {
+app.post("/api/whatsapp/send", adminOnly, async (req, res) => {
   try {
     const { to, message, templateName, parameters } = req.body || {};
     if (!to) return res.status(400).json({ error: "to number required" });
@@ -891,7 +909,7 @@ app.post("/api/whatsapp/send", async (req, res) => {
   }
 });
 
-app.get("/api/whatsapp/templates", async (req, res) => {
+app.get("/api/whatsapp/templates", adminOnly, async (req, res) => {
   try {
     const templates = await whatsapp.listTemplates();
     res.json(templates);
@@ -900,7 +918,7 @@ app.get("/api/whatsapp/templates", async (req, res) => {
   }
 });
 
-app.get("/api/whatsapp/messages", async (req, res) => {
+app.get("/api/whatsapp/messages", adminOnly, async (req, res) => {
   try {
     const messages = whatsapp.listMessages();
     res.json(messages);
@@ -909,7 +927,7 @@ app.get("/api/whatsapp/messages", async (req, res) => {
   }
 });
 
-app.get("/api/whatsapp/contacts", async (req, res) => {
+app.get("/api/whatsapp/contacts", adminOnly, async (req, res) => {
   try {
     const contacts = whatsapp.getContacts();
     res.json(contacts);
@@ -919,17 +937,9 @@ app.get("/api/whatsapp/contacts", async (req, res) => {
 });
 
 // Webhook from WhatsApp for incoming messages
-app.post("/api/webhooks/whatsapp/messages", express.json(), async (req, res) => {
-  try {
-    await whatsapp.handleMessageWebhook(req.body);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
 // ---- Shopify ---------------------------------------------------------------
-app.get("/api/shopify/health", async (req, res) => {
+app.get("/api/shopify/health", adminOnly, async (req, res) => {
   try {
     const status = await shopify.health();
     res.json(status);
@@ -938,7 +948,7 @@ app.get("/api/shopify/health", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/shop", async (req, res) => {
+app.get("/api/shopify/shop", adminOnly, async (req, res) => {
   try {
     const shop = await shopify.getShop();
     res.json(shop);
@@ -947,7 +957,7 @@ app.get("/api/shopify/shop", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/products", async (req, res) => {
+app.get("/api/shopify/products", adminOnly, async (req, res) => {
   try {
     const { limit, status } = req.query;
     const products = await shopify.listProducts({ limit: parseInt(limit) || 50, status: status || "active" });
@@ -957,7 +967,7 @@ app.get("/api/shopify/products", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/products/:productId", async (req, res) => {
+app.get("/api/shopify/products/:productId", adminOnly, async (req, res) => {
   try {
     const product = await shopify.getProduct(req.params.productId);
     res.json(product);
@@ -966,7 +976,7 @@ app.get("/api/shopify/products/:productId", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/orders", async (req, res) => {
+app.get("/api/shopify/orders", adminOnly, async (req, res) => {
   try {
     const { limit, status } = req.query;
     const orders = await shopify.listOrders({ limit: parseInt(limit) || 50, status: status || "any" });
@@ -976,7 +986,7 @@ app.get("/api/shopify/orders", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/customers", async (req, res) => {
+app.get("/api/shopify/customers", adminOnly, async (req, res) => {
   try {
     const { limit } = req.query;
     const customers = await shopify.listCustomers({ limit: parseInt(limit) || 50 });
@@ -986,7 +996,7 @@ app.get("/api/shopify/customers", async (req, res) => {
   }
 });
 
-app.get("/api/shopify/analytics", async (req, res) => {
+app.get("/api/shopify/analytics", adminOnly, async (req, res) => {
   try {
     const analytics = await shopify.getAnalytics();
     res.json(analytics);
@@ -995,7 +1005,7 @@ app.get("/api/shopify/analytics", async (req, res) => {
   }
 });
 
-app.post("/api/shopify/sync", async (req, res) => {
+app.post("/api/shopify/sync", adminOnly, async (req, res) => {
   try {
     const count = await shopify.syncProducts();
     store.logActivity("integration", `Shopify products synced: ${count} products`);
@@ -1006,7 +1016,7 @@ app.post("/api/shopify/sync", async (req, res) => {
 });
 
 // ---- WordPress ----------------------------------------------------------
-app.get("/api/wordpress/health", async (req, res) => {
+app.get("/api/wordpress/health", adminOnly, async (req, res) => {
   try {
     const status = await wordpress.health();
     res.json(status);
@@ -1015,7 +1025,7 @@ app.get("/api/wordpress/health", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/site", async (req, res) => {
+app.get("/api/wordpress/site", adminOnly, async (req, res) => {
   try {
     const site = await wordpress.getSite();
     res.json(site);
@@ -1024,7 +1034,7 @@ app.get("/api/wordpress/site", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/posts", async (req, res) => {
+app.get("/api/wordpress/posts", adminOnly, async (req, res) => {
   try {
     const { limit, status } = req.query;
     const posts = await wordpress.listPosts({ limit: parseInt(limit) || 10, status: status || "publish" });
@@ -1034,7 +1044,7 @@ app.get("/api/wordpress/posts", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/posts/:postId", async (req, res) => {
+app.get("/api/wordpress/posts/:postId", adminOnly, async (req, res) => {
   try {
     const post = await wordpress.getPost(req.params.postId);
     res.json(post);
@@ -1043,7 +1053,7 @@ app.get("/api/wordpress/posts/:postId", async (req, res) => {
   }
 });
 
-app.post("/api/wordpress/posts", async (req, res) => {
+app.post("/api/wordpress/posts", adminOnly, async (req, res) => {
   try {
     const { title, content, excerpt, status, categories, tags } = req.body || {};
     if (!title || !content) return res.status(400).json({ error: "title and content required" });
@@ -1055,7 +1065,7 @@ app.post("/api/wordpress/posts", async (req, res) => {
   }
 });
 
-app.patch("/api/wordpress/posts/:postId", async (req, res) => {
+app.patch("/api/wordpress/posts/:postId", adminOnly, async (req, res) => {
   try {
     const { title, content, excerpt, status, categories, tags } = req.body || {};
     const post = await wordpress.updatePost(req.params.postId, { title, content, excerpt, status, categories, tags });
@@ -1066,7 +1076,7 @@ app.patch("/api/wordpress/posts/:postId", async (req, res) => {
   }
 });
 
-app.delete("/api/wordpress/posts/:postId", async (req, res) => {
+app.delete("/api/wordpress/posts/:postId", adminOnly, async (req, res) => {
   try {
     await wordpress.deletePost(req.params.postId);
     store.logActivity("wordpress", `Post deleted`);
@@ -1076,7 +1086,7 @@ app.delete("/api/wordpress/posts/:postId", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/pages", async (req, res) => {
+app.get("/api/wordpress/pages", adminOnly, async (req, res) => {
   try {
     const { limit } = req.query;
     const pages = await wordpress.listPages({ limit: parseInt(limit) || 10 });
@@ -1086,7 +1096,7 @@ app.get("/api/wordpress/pages", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/categories", async (req, res) => {
+app.get("/api/wordpress/categories", adminOnly, async (req, res) => {
   try {
     const categories = await wordpress.getCategories();
     res.json(categories);
@@ -1095,7 +1105,7 @@ app.get("/api/wordpress/categories", async (req, res) => {
   }
 });
 
-app.get("/api/wordpress/tags", async (req, res) => {
+app.get("/api/wordpress/tags", adminOnly, async (req, res) => {
   try {
     const tags = await wordpress.getTags();
     res.json(tags);
@@ -1658,12 +1668,12 @@ app.get("/api/workflow-options", (_req, res) => {
 
 // ---- custom connectors (webhooks) -------------------------------------------
 const connectorsMod = require("./src/connectors");
-app.get("/api/connectors", (_req, res) => res.json(connectorsMod.listPublic()));
+app.get("/api/webhook-connectors", (_req, res) => res.json(connectorsMod.listPublic()));
 app.post("/api/connectors", async (req, res) => {
   try { res.json(await connectorsMod.create(req.body || {})); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
-app.delete("/api/connectors/:id", (req, res) => {
+app.delete("/api/webhook-connectors/:id", (req, res) => {
   try { connectorsMod.remove(req.params.id); res.json({ ok: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
