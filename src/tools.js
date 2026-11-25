@@ -10,6 +10,7 @@ const budget = require("./budget");
 const { ingestWebsite } = require("./ingest");
 const media = require("./media");
 const memory = require("./memory");
+const charge = require("./credits/charge");
 
 const PLATFORMS = ["instagram", "facebook", "tiktok"];
 
@@ -425,16 +426,22 @@ const toolSchemas = [
 function makeHandlers(base = dt.now(), employeeId) {
   return {
     async ingest_website(input) {
-      try {
-        const profile = await ingestWebsite(input.url);
-        return {
-          ok: true,
-          content: `Learned the business: ${profile.name} (${profile.businessType}). Tagline: "${profile.tagline}". Services: ${(profile.services || []).join("; ") || "none found"}. Tone: ${profile.tone}.`,
-          action: { type: "profile", profile },
-        };
-      } catch (e) {
-        return { ok: false, content: `Ingest failed: ${e.message}` };
-      }
+      // Billed through the ledger: nothing is charged unless the work
+      // succeeds, and anything expensive is held first.
+      const billed = await charge.run("website.learn", { refId: input && input.attach_to }, async () => {
+        try {
+          const profile = await ingestWebsite(input.url);
+          return {
+            ok: true,
+            content: `Learned the business: ${profile.name} (${profile.businessType}). Tagline: "${profile.tagline}". Services: ${(profile.services || []).join("; ") || "none found"}. Tone: ${profile.tone}.`,
+            action: { type: "profile", profile },
+          };
+        } catch (e) {
+          return { ok: false, content: `Ingest failed: ${e.message}` };
+        }
+      });
+      if (!billed.ok && billed.needsTopup) return { ok: false, content: billed.reason, action: { type: "needs_credits", cost: billed.cost } };
+      return billed.result;
     },
 
     get_business_profile() {
@@ -573,10 +580,12 @@ function makeHandlers(base = dt.now(), employeeId) {
       return { ok: true, content: w.html };
     },
 
-    build_website(input) {
+    async build_website(input) {
       const website = require("./website");
       try {
         const out = website.saveHtml(input.html, { title: input.title, note: input.note || "first draft" });
+        // billed once the draft is genuinely saved, never before
+        await charge.run("website.build", { refId: "site" }, async () => out);
         return {
           ok: true,
           content: `Saved "${input.title}" as a draft. The preview on the Website page shows it now; it is NOT live yet — run publish_website (it security-scans first), or the owner can hit Publish on the Website page.`,
@@ -587,7 +596,7 @@ function makeHandlers(base = dt.now(), employeeId) {
       }
     },
 
-    edit_website(input) {
+    async edit_website(input) {
       const website = require("./website");
       const current = website.get();
       if (current.mode !== "built") {
@@ -595,6 +604,9 @@ function makeHandlers(base = dt.now(), employeeId) {
       }
       try {
         const out = website.saveHtml(input.html, { title: current.title, note: input.note });
+        // a rewrite costs more than a tweak; the split is by how much HTML changed
+        const big = Math.abs(String(input.html || "").length - String(current.html || "").length) > 1200;
+        await charge.run(big ? "website.edit_large" : "website.edit_small", { refId: "site" }, async () => out);
         return {
           ok: true,
           content: `Saved the edit as a draft — ${input.note}. The Website page preview shows it; publish_website makes it live after the security scan passes.`,
@@ -605,7 +617,7 @@ function makeHandlers(base = dt.now(), employeeId) {
       }
     },
 
-    create_post(input) {
+    async create_post(input) {
       if (!PLATFORMS.includes(input.platform)) {
         return { ok: false, content: `Unknown platform "${input.platform}". Use one of: ${PLATFORMS.join(", ")}.` };
       }
@@ -651,6 +663,7 @@ function makeHandlers(base = dt.now(), employeeId) {
           : `Drafted a ${record.platform} post`,
         record.id
       );
+      await charge.run("social.post", { refId: record.id }, async () => record);
       return {
         ok: true,
         content: heldForApproval
@@ -749,43 +762,55 @@ function makeHandlers(base = dt.now(), employeeId) {
     },
 
     async generate_image(input) {
-      try {
-        const img = await media.generateImage(input);
-        let attached = "";
-        if (input.attach_to) {
-          const posts = store.getPosts();
-          const post = findPost(posts, input.attach_to);
-          if (post) {
-            post.mediaId = img.id; post.mediaFile = img.file;
-            post.mediaUrl = require("./media").publicUrl(img.file);
-            store.savePosts(posts);
-            attached = ` Attached to post ${post.id} — it'll upload with the post when it publishes.`;
-          } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+      // Billed through the ledger: nothing is charged unless the work
+      // succeeds, and anything expensive is held first.
+      const billed = await charge.run("social.image", { refId: input && input.attach_to }, async () => {
+        try {
+          const img = await media.generateImage(input);
+          let attached = "";
+          if (input.attach_to) {
+            const posts = store.getPosts();
+            const post = findPost(posts, input.attach_to);
+            if (post) {
+              post.mediaId = img.id; post.mediaFile = img.file;
+              post.mediaUrl = require("./media").publicUrl(img.file);
+              store.savePosts(posts);
+              attached = ` Attached to post ${post.id} — it'll upload with the post when it publishes.`;
+            } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+          }
+          return { ok: true, content: `Image rendered: ${img.format} ${img.w}x${img.h}, "${img.headline}".${attached} The owner can see it on the Social page.`, action: { type: "media", media: img } };
+        } catch (e) {
+          return { ok: false, content: `Image generation failed: ${e.message}` };
         }
-        return { ok: true, content: `Image rendered: ${img.format} ${img.w}x${img.h}, "${img.headline}".${attached} The owner can see it on the Social page.`, action: { type: "media", media: img } };
-      } catch (e) {
-        return { ok: false, content: `Image generation failed: ${e.message}` };
-      }
+      });
+      if (!billed.ok && billed.needsTopup) return { ok: false, content: billed.reason, action: { type: "needs_credits", cost: billed.cost } };
+      return billed.result;
     },
 
     async generate_video(input) {
-      try {
-        const vid = await media.generateVideo(input);
-        let attached = "";
-        if (input.attach_to) {
-          const posts = store.getPosts();
-          const post = findPost(posts, input.attach_to);
-          if (post) {
-            post.mediaId = vid.id; post.mediaFile = vid.file; post.isVideo = true;
-            post.mediaUrl = require("./media").publicUrl(vid.file);
-            store.savePosts(posts);
-            attached = ` Attached to post ${post.id}.`;
-          } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+      // Billed through the ledger: nothing is charged unless the work
+      // succeeds, and anything expensive is held first.
+      const billed = await charge.run("social.video", { refId: input && input.attach_to, units: Number(input.seconds) || 15 }, async () => {
+        try {
+          const vid = await media.generateVideo(input);
+          let attached = "";
+          if (input.attach_to) {
+            const posts = store.getPosts();
+            const post = findPost(posts, input.attach_to);
+            if (post) {
+              post.mediaId = vid.id; post.mediaFile = vid.file; post.isVideo = true;
+              post.mediaUrl = require("./media").publicUrl(vid.file);
+              store.savePosts(posts);
+              attached = ` Attached to post ${post.id}.`;
+            } else attached = ` (couldn't find post "${input.attach_to}" to attach it to)`;
+          }
+          return { ok: true, content: `Video produced: ${vid.seconds}s, ${vid.slides} slides, ${vid.format} ${vid.w}x${vid.h}.${attached} The owner can watch it on the Social page.`, action: { type: "media", media: vid } };
+        } catch (e) {
+          return { ok: false, content: `Video generation failed: ${e.message}` };
         }
-        return { ok: true, content: `Video produced: ${vid.seconds}s, ${vid.slides} slides, ${vid.format} ${vid.w}x${vid.h}.${attached} The owner can watch it on the Social page.`, action: { type: "media", media: vid } };
-      } catch (e) {
-        return { ok: false, content: `Video generation failed: ${e.message}` };
-      }
+      });
+      if (!billed.ok && billed.needsTopup) return { ok: false, content: billed.reason, action: { type: "needs_credits", cost: billed.cost } };
+      return billed.result;
     },
 
     manage_employee(input) {
@@ -861,7 +886,7 @@ function makeHandlers(base = dt.now(), employeeId) {
       return { ok: true, content: `Done: "${t.what}" ticked off.`, action: { type: "task", record: t } };
     },
 
-    create_lead(input) {
+    async create_lead(input) {
       if (!input.name || !input.name.trim()) return { ok: false, content: "A lead needs at least a name." };
       const leads = store.getCol("leads");
       const record = {
@@ -882,10 +907,11 @@ function makeHandlers(base = dt.now(), employeeId) {
       store.saveCol("leads", leads);
       store.logActivity("lead", `New lead captured: ${record.name}${record.interest ? ` — ${record.interest}` : ""}`, record.id);
       events.emit("lead.created", { leadId: record.id, summary: record.interest || record.name });
+      await charge.run("crm.lead_capture", { refId: record.id }, async () => record);
       return { ok: true, content: `Lead saved: ${record.name} (${record.id}).`, action: { type: "lead", record } };
     },
 
-    book_appointment(input) {
+    async book_appointment(input) {
       const when = resolveWhen(input.when, base);
       if (!when) return { ok: false, content: `Couldn't understand the time "${input.when}".` };
       if (when <= base) return { ok: false, content: `"${input.when}" is in the past. Pick a future time.` };
@@ -915,6 +941,7 @@ function makeHandlers(base = dt.now(), employeeId) {
       store.saveCol("appointments", appts);
       store.logActivity("appointment", `Appointment booked: ${record.customer_name} — ${record.service}, ${formatWhen(record.startsAt)}`, record.id);
       events.emit("appointment.booked", { appointmentId: record.id, summary: `${record.service} for ${record.customer_name}` });
+      await charge.run("booking.create", { refId: record.id }, async () => record);
       return { ok: true, content: `Booked ${record.customer_name} — ${record.service} on ${formatWhen(record.startsAt)} (${record.id}).`, action: { type: "appointment", record } };
     },
 

@@ -9,6 +9,7 @@ const { buildSystemPrompt } = require("./prompt");
 const store = require("./store");
 const budget = require("./budget");
 const dt = require("./datetime");
+const charge = require("./credits/charge");
 
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.ANTHROPIC_MODEL || process.env.MODEL || "claude-opus-4-8";
@@ -141,6 +142,11 @@ async function respondLive(session, userMessage, employeeId, onStep) {
 
     const reply = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     budget.record("claude.message", 1, "chat turn");
+    // Riley answering a customer IS the support reply — it isn't a tool call,
+    // it's the turn itself. Essential, so it keeps working on the buffer.
+    if (employeeId === "support") {
+      await charge.run("support.reply", {}, async () => true);
+    }
     return { reply, actions, steps };
   }
 

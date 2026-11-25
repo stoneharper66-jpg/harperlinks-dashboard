@@ -6,6 +6,7 @@ const express = require("express");
 
 const engine = require("./src/engine");
 const memory = require("./src/memory");
+const charge = require("./src/credits/charge");
 const claims = require("./src/claims");
 const notify = require("./src/notify");
 const auth = require("./src/auth");
@@ -2185,6 +2186,9 @@ app.get("/api/report", async (req, res) => {
     upcomingAppts: appts.filter((a) => a.status === "booked" && new Date(a.startsAt) > now && new Date(a.startsAt) < new Date(now.getTime() + 7 * 86400e3)).length,
   };
 
+  // The written report is a billable action; the quick facts-only version
+  // (which the Command Centre hits on every load) is free, so simply opening
+  // the dashboard never costs the customer anything.
   if (engine.mode() === "live" && !req.query.quick) {
     try {
       const Anthropic = require("@anthropic-ai/sdk");
@@ -2196,6 +2200,7 @@ app.get("/api/report", async (req, res) => {
         system: "You write a short, friendly daily report for a small-business owner. 3 short paragraphs max: what happened, what needs attention, one opportunity. Use ONLY the facts given — never invent numbers. Australian tone, no fluff.",
         messages: [{ role: "user", content: JSON.stringify(facts) }],
       });
+      await charge.run("report.generate", { refId: new Date().toISOString().slice(0, 10) }, async () => true);
       return res.json({ report: resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n"), facts, by: "claude" });
     } catch (e) {
       console.error("report error:", e.message);

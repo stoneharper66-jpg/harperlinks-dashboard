@@ -5,6 +5,7 @@
 // honest log line instead of pretending to send anything.
 
 const store = require("./store");
+const charge = require("./credits/charge");
 const employees = require("./employees");
 const media = require("./media");
 const connectors = require("./connectors");
@@ -34,6 +35,15 @@ const ACTIONS = [
 ];
 
 async function runAction(action, event, payload, workflow) {
+  // Every workflow step that actually fires is a billable run. Flynn's
+  // follow-up draft is priced separately on top, because the spec lists it
+  // as its own action.
+  const billed = await charge.run("workflow.run", { refId: workflow && workflow.id }, async () => true);
+  if (!billed.ok) return { ok: false, detail: billed.reason };
+  if (action.type === "draft_reply" || action.type === "create_followup") {
+    const f = await charge.run("crm.follow_up", { refId: workflow && workflow.id }, async () => true);
+    if (!f.ok) return { ok: false, detail: f.reason };
+  }
   // AI-powered steps are staffed: Flynn handles lead outreach, Sage drafts content.
   // If that employee is switched off, the step waits honestly instead of running.
   const STAFF = { draft_reply: "sales", create_followup: "sales", draft_social_post: "social", generate_image: "social", publish_everywhere: "social" };
