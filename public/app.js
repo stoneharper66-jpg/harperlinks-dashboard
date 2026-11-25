@@ -653,6 +653,7 @@
       view.innerHTML = "";
       view.appendChild(el);
       HL.repaintBusy();
+      HL.applyLayout(id, view);
     }).catch(function (e) {
       view.innerHTML = "";
       view.appendChild(HL.emptyState("⚠️", "This page hit a snag: " + e.message, "Retry", HL.navigate));
@@ -664,6 +665,148 @@
      Bottom-right, above the buddy. Every tick is read from real account
      state on the server — a step goes green because the thing actually
      happened, not because someone clicked "done". */
+  /* ================= make it theirs =================
+     Every page is a stack of blocks. This lets the owner drag those blocks
+     into the order they want and hide the ones they never look at, per page,
+     saved to their account so it follows them to any browser.
+
+     It works on every page without any page knowing about it: each top-level
+     block gets a stable key from its heading (or its class), and we reorder
+     by that key after the page renders. Pages can change their contents
+     freely — an unknown key just falls back to its natural position. */
+  var LAYOUT = {};
+  var customising = false;
+
+  function blockKey(el, i) {
+    var h = el.querySelector("h2, h3, .app-sec h3, .s-label");
+    var t = h ? h.textContent.trim().slice(0, 40) : "";
+    var cls = (el.className || "").toString().split(" ")[0] || "block";
+    return (t || cls + ":" + i).toLowerCase().replace(/\s+/g, "-");
+  }
+
+  HL.loadLayout = function () {
+    return HL.api("/api/layout")
+      .then(function (d) { LAYOUT = (d && d.layout) || {}; })
+      .catch(function () { LAYOUT = {}; });
+  };
+
+  function saveLayout(page, view) {
+    var order = [], hidden = [];
+    [].forEach.call(view.children, function (el) {
+      if (!el.dataset.blk) return;
+      order.push(el.dataset.blk);
+      if (el.classList.contains("blk-off")) hidden.push(el.dataset.blk);
+    });
+    LAYOUT[page] = { order: order, hidden: hidden };
+    HL.post("/api/layout", { page: page, order: order, hidden: hidden }, "PUT").catch(function () {});
+  }
+
+  /* Applied after every render. Tags the blocks, puts them in the saved
+     order, and re-hides whatever was hidden. */
+  HL.applyLayout = function (page, view) {
+    // every page renders into one wrapper div, so the blocks are its
+    // children, not the view's
+    if (view.children.length === 1 && view.firstElementChild.children.length > 1) {
+      view = view.firstElementChild;
+    }
+    HL._layoutHost = view;
+    var kids = [].slice.call(view.children).filter(function (el) {
+      return el.nodeType === 1 && el.offsetHeight !== 0;
+    });
+    if (kids.length < 2) return;                 // nothing to arrange
+    kids.forEach(function (el, i) { el.dataset.blk = blockKey(el, i); el.classList.add("blk"); });
+
+    var saved = LAYOUT[page];
+    if (saved && saved.order && saved.order.length) {
+      var byKey = {};
+      kids.forEach(function (el) { byKey[el.dataset.blk] = el; });
+      saved.order.forEach(function (k) { if (byKey[k]) view.appendChild(byKey[k]); });
+      (saved.hidden || []).forEach(function (k) { if (byKey[k]) byKey[k].classList.add("blk-off"); });
+    }
+    if (customising) decorate(page, view);
+  };
+
+  /* ---- customise mode ---- */
+  function decorate(page, view) {
+    [].forEach.call(view.children, function (el) {
+      if (!el.dataset.blk || el.querySelector(":scope > .blk-bar")) return;
+      var bar = HL.el("div", "blk-bar");
+
+      var grip = HL.el("button", "blk-grip", "⠿");
+      grip.title = "Drag to move";
+      bar.appendChild(grip);
+
+      var up = HL.el("button", "blk-btn", "↑");
+      up.title = "Move up";
+      up.addEventListener("click", function () {
+        var prev = el.previousElementSibling;
+        if (prev && prev.dataset.blk) { view.insertBefore(el, prev); saveLayout(page, view); }
+      });
+      var down = HL.el("button", "blk-btn", "↓");
+      down.title = "Move down";
+      down.addEventListener("click", function () {
+        var next = el.nextElementSibling;
+        if (next && next.dataset.blk) { view.insertBefore(next, el); saveLayout(page, view); }
+      });
+      bar.appendChild(up); bar.appendChild(down);
+
+      var eye = HL.el("button", "blk-btn", el.classList.contains("blk-off") ? "Show" : "Hide");
+      eye.addEventListener("click", function () {
+        el.classList.toggle("blk-off");
+        eye.textContent = el.classList.contains("blk-off") ? "Show" : "Hide";
+        saveLayout(page, view);
+      });
+      bar.appendChild(eye);
+
+      el.insertBefore(bar, el.firstChild);
+
+      /* pointer drag — swap with whichever block you're over */
+      grip.addEventListener("pointerdown", function (ev) {
+        ev.preventDefault();
+        el.classList.add("blk-dragging");
+        grip.setPointerCapture(ev.pointerId);
+        function move(e2) {
+          var over = document.elementFromPoint(e2.clientX, e2.clientY);
+          while (over && over !== view && !over.dataset.blk) over = over.parentElement;
+          if (!over || over === el || !over.dataset.blk) return;
+          var r = over.getBoundingClientRect();
+          view.insertBefore(el, e2.clientY < r.top + r.height / 2 ? over : over.nextElementSibling);
+        }
+        function up2() {
+          el.classList.remove("blk-dragging");
+          grip.removeEventListener("pointermove", move);
+          grip.removeEventListener("pointerup", up2);
+          saveLayout(page, view);
+        }
+        grip.addEventListener("pointermove", move);
+        grip.addEventListener("pointerup", up2);
+      });
+    });
+  }
+
+  function undecorate(view) {
+    view.querySelectorAll(".blk-bar").forEach(function (b) { b.remove(); });
+  }
+
+  HL.toggleCustomise = function (on) {
+    customising = on === undefined ? !customising : !!on;
+    document.body.classList.toggle("customising", customising);
+    var view = HL._layoutHost || HL.$("view"), page = document.body.dataset.page;
+    if (customising) decorate(page, view); else undecorate(view);
+    HL.toast(customising
+      ? "Move blocks with ↑ ↓ or the grip, and hide what you don't use."
+      : "Saved — that's how this page stays.");
+  };
+
+  HL.resetLayout = function () {
+    var page = document.body.dataset.page;
+    HL.api("/api/layout/" + page, { method: "DELETE" }).then(function () {
+      delete LAYOUT[page];
+      HL.toast("Back to the default layout");
+      HL.navigate();
+    });
+  };
+
   HL.refreshHealth = function () {
     HL.api("/api/health").then(function (h) {
       var badge = HL.$("modeBadge"), label = HL.$("modeLabel");
@@ -728,7 +871,7 @@
           HL.post("/api/auth/logout").then(function () { location.href = "/login.html"; });
         });
       }
-      bootShell();
+      HL.loadLayout().then(bootShell);
     }).catch(function (e) {
       // A 401 redirects to /login.html inside HL.api, so reaching here with a
       // real error means the shell failed to build. Swallowing that silently
@@ -761,6 +904,16 @@
 
     HL.$("topDate").textContent = new Date().toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
     HL.$("sideToggle").addEventListener("click", function () { HL.$("sidebar").classList.toggle("open"); });
+    var cb = HL.$("customBtn");
+    if (cb) {
+      cb.addEventListener("click", function () {
+        HL.toggleCustomise();
+        cb.textContent = document.body.classList.contains("customising") ? "Done" : "Customise";
+        cb.classList.toggle("on", document.body.classList.contains("customising"));
+      });
+      cb.addEventListener("dblclick", HL.resetLayout);
+      cb.title = "Rearrange this page — double-click to reset it";
+    }
     HL.$("modalBackdrop").addEventListener("click", function (e) { if (e.target === HL.$("modalBackdrop")) HL.closeModal(); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") HL.closeModal(); });
     window.addEventListener("hashchange", function () {

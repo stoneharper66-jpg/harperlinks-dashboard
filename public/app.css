@@ -2476,3 +2476,34 @@ body[data-page="billing"]      { --pg-a: rgba(23,166,115,.13); --pg-b: rgba(10,1
   font: inherit; font-size: 11.5px; color: var(--muted); text-decoration: underline;
 }
 .fts-alt:hover { color: var(--accent); }
+
+/* ---- customise mode: the owner arranges their own pages ------------------ */
+.tb-custom {
+  background: none; border: 1px solid var(--surface-line); border-radius: 99px;
+  padding: 5px 13px; font: inherit; font-size: 12.5px; font-weight: 550; color: var(--muted);
+  cursor: pointer; transition: all var(--t-fast);
+}
+.tb-custom:hover { color: var(--text); border-color: var(--surface-line-strong); background: var(--card); }
+.tb-custom.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* blocks only look different while you're arranging them */
+body.customising .blk { position: relative; outline: 1.5px dashed var(--accent-border); outline-offset: 4px; border-radius: 18px; }
+body.customising .blk-off { opacity: .4; }
+.blk-off { display: none; }
+body.customising .blk-off { display: block; }
+
+.blk-bar {
+  position: absolute; top: -13px; right: 12px; z-index: 5;
+  display: flex; gap: 4px; padding: 3px;
+  background: var(--panel); border: 1px solid var(--surface-line);
+  border-radius: 99px; box-shadow: var(--lift-2);
+}
+.blk-grip, .blk-btn {
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 11.5px;
+  color: var(--muted); padding: 3px 8px; border-radius: 99px; line-height: 1;
+}
+.blk-grip { cursor: grab; font-size: 13px; }
+.blk-grip:active { cursor: grabbing; }
+.blk-btn:hover, .blk-grip:hover { background: var(--accent-tint); color: var(--accent); }
+.blk-dragging { opacity: .6; transform: scale(.99); }
+body.customising .view > * { transition: transform .18s var(--ease-out); }

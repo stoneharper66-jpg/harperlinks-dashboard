@@ -1309,6 +1309,31 @@ app.post("/api/plan", (req, res) => {
   });
 });
 
+// ---- layout: the owner's own arrangement -------------------------------------
+// Which blocks they've moved, and which they've hidden, per page. Stored on
+// the account, so it follows them to any browser.
+app.get("/api/layout", (_req, res) => {
+  res.json({ ok: true, layout: store.getCol("layout", {}) });
+});
+
+app.put("/api/layout", (req, res) => {
+  const body = req.body || {};
+  const page = String(body.page || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
+  if (!page) return res.status(400).json({ error: "Which page?" });
+  const layout = store.getCol("layout", {});
+  const clean = (arr) => (Array.isArray(arr) ? arr : []).map((k) => String(k).slice(0, 80)).slice(0, 60);
+  layout[page] = { order: clean(body.order), hidden: clean(body.hidden) };
+  store.saveCol("layout", layout);
+  res.json({ ok: true, layout: layout[page] });
+});
+
+app.delete("/api/layout/:page", (req, res) => {
+  const layout = store.getCol("layout", {});
+  delete layout[String(req.params.page)];
+  store.saveCol("layout", layout);
+  res.json({ ok: true });
+});
+
 // ---- setup checklist ---------------------------------------------------------
 // Every step's "done" is read from real account state, never from a flag we
 // set when someone clicked something. A step can't be ticked by pretending.
